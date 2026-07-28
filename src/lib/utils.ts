@@ -71,15 +71,35 @@ export function hasMoreThanTwoDecimals(value: number): boolean {
   return !!decimals && decimals.length > 2;
 }
 
+/** Safely turns whatever a form field actually handed us into a number for validation, without
+ * ever silently treating a missing/blank value as 0. react-hook-form only produces a real
+ * `number` here if the field was registered with `valueAsNumber: true` (or `Controller` +
+ * `valueAsNumber`) — without that, `register()` hands back the raw DOM string untouched (verified
+ * directly against react-hook-form's source: `valueAsNumber ? (v === '' ? NaN : v ? +v : v) : v`).
+ * A field that forgets the flag must still validate correctly, not silently reject every valid
+ * value — so this accepts either shape and normalizes once, centrally, instead of requiring every
+ * page to remember the flag. Blank/whitespace-only input becomes NaN (invalid), never 0. */
+function toNumericValue(raw: unknown): number {
+  if (typeof raw === 'number') return raw;
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    return trimmed === '' ? NaN : Number(trimmed);
+  }
+  return NaN;
+}
+
 /** react-hook-form `validate` rule for a currency amount — mirrors the backend's
  * IsMonetaryAmount decorator's priority order exactly (type → negative → up to 2 decimal places
  * → max) so an invalid value is caught before submit with the same message the API would give,
  * instead of round-tripping for the same rejection (or, worse, showing a different-priority
  * message than the backend would for the same input). Pass `max` for fields with an established
- * ceiling (e.g. the ₹100,000 Business Settings cap) — omit it if none exists. */
+ * ceiling (e.g. the ₹100,000 Business Settings cap) — omit it if none exists. Accepts a raw string
+ * as well as a number (see `toNumericValue`) so it stays correct even on a field whose `register()`
+ * call omits `valueAsNumber: true`. */
 export function validateMonetaryAmount(label: string, max?: number) {
-  return (value: number | undefined | null): true | string => {
-    if (value === undefined || value === null || Number.isNaN(value) || !Number.isFinite(value)) {
+  return (raw: number | string | undefined | null): true | string => {
+    const value = toNumericValue(raw);
+    if (Number.isNaN(value) || !Number.isFinite(value)) {
       return `${label} must be a valid number`;
     }
     if (value < 0) return `${label} cannot be negative`;

@@ -40,7 +40,7 @@ export default function AmcPlansPage() {
   const [deactivateTarget, setDeactivateTarget] = useState<AmcPlan | null>(null);
 
   const { register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm<PlanForm>({ defaultValues: emptyForm });
-  const priceField = register('price', { required: true, validate: validateMonetaryAmount('Price') });
+  const priceField = register('price', { required: true, valueAsNumber: true, validate: validateMonetaryAmount('Price') });
 
   // Cross-field validation, mirrored from the backend (amc-plan.service.ts's validateVisitInterval):
   // the interval can't exceed the duration, and the last generated visit — (visitCount-1) intervals

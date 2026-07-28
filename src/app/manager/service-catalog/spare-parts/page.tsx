@@ -157,7 +157,7 @@ export default function SparePartsPage() {
             min={0}
             step="0.01"
             error={errors.unitPrice?.message}
-            {...register('unitPrice', { required: true, validate: validateMonetaryAmount('Unit price') })}
+            {...register('unitPrice', { required: true, valueAsNumber: true, validate: validateMonetaryAmount('Unit price') })}
           />
 
           <div className="flex justify-end gap-3 pt-2">
