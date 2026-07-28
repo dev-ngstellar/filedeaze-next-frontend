@@ -16,7 +16,7 @@ import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Badge } from '@/components/ui/Badge';
-import { getErrorMessage } from '@/lib/utils';
+import { getErrorMessage, validateMonetaryAmount } from '@/lib/utils';
 
 type SubForm = { categoryId: string; name: string; isActive?: boolean };
 type ChargesForm = { serviceCharge: number; inspectionCharge: number; emergencyCharge: number };
@@ -43,7 +43,7 @@ export default function ServiceSubCategoriesPage() {
   const subCategories = data?.items ?? [];
 
   const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm<SubForm>();
-  const { register: rc, handleSubmit: hc, reset: resetC, formState: { isSubmitting: sc } } = useForm<ChargesForm>();
+  const { register: rc, handleSubmit: hc, reset: resetC, formState: { isSubmitting: sc, errors: errorsC } } = useForm<ChargesForm>();
 
   const openEdit = (s: ServiceSubCategory) => { setEditing(s); reset({ categoryId: s.categoryId, name: s.name, isActive: s.isActive }); };
 
@@ -150,9 +150,21 @@ export default function ServiceSubCategoriesPage() {
 
       <Modal open={!!chargingId} onClose={() => { setChargingId(null); resetC(); }} title="Set Service Charges" size="sm">
         <form onSubmit={hc(d => chargesMutation.mutate(d))} className="space-y-4">
-          <Input label="Service Charge (₹)" type="number" step="0.01" {...rc('serviceCharge', { valueAsNumber: true })} />
-          <Input label="Inspection Charge (₹)" type="number" step="0.01" {...rc('inspectionCharge', { valueAsNumber: true })} />
-          <Input label="Emergency Charge (₹)" type="number" step="0.01" {...rc('emergencyCharge', { valueAsNumber: true })} />
+          <Input
+            label="Service Charge (₹)" type="number" step="0.01" min={0}
+            error={errorsC.serviceCharge?.message}
+            {...rc('serviceCharge', { valueAsNumber: true, validate: validateMonetaryAmount('Service charge') })}
+          />
+          <Input
+            label="Inspection Charge (₹)" type="number" step="0.01" min={0}
+            error={errorsC.inspectionCharge?.message}
+            {...rc('inspectionCharge', { valueAsNumber: true, validate: validateMonetaryAmount('Inspection charge') })}
+          />
+          <Input
+            label="Emergency Charge (₹)" type="number" step="0.01" min={0}
+            error={errorsC.emergencyCharge?.message}
+            {...rc('emergencyCharge', { valueAsNumber: true, validate: validateMonetaryAmount('Emergency charge') })}
+          />
           <div className="flex justify-end gap-3"><Button variant="secondary" type="button" onClick={() => { setChargingId(null); resetC(); }}>Cancel</Button><Button type="submit" loading={sc}>Save</Button></div>
         </form>
       </Modal>

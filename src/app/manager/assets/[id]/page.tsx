@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import Link from 'next/link';
 import { ChevronLeft, Pencil, Trash2, ShieldCheck, ShieldOff, Eye, ImagePlus, X } from 'lucide-react';
 import api from '@/lib/axios';
-import { CustomerAsset, AmcSubscription, Ticket } from '@/types';
+import { CustomerAsset, Ticket } from '@/types';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Button } from '@/components/ui/Button';
@@ -36,13 +36,6 @@ export default function AssetDetailPage() {
     queryKey: ['customer-asset-history', id],
     queryFn: async () => (await api.get(`/web/manager/customer-assets/${id}/service-history`)).data.data,
   });
-
-  const { data: activeSubs = [] } = useQuery<AmcSubscription[]>({
-    queryKey: ['customer-asset-active-amc', id],
-    queryFn: async () => (await api.get('/web/manager/amc/subscriptions', { params: { customerAssetId: id, status: 'ACTIVE' } })).data.data,
-    enabled: !!asset?.hasActiveAmc,
-  });
-  const activeSub = activeSubs[0];
 
   const deleteMutation = useMutation({
     mutationFn: () => api.delete(`/web/manager/customer-assets/${id}`),
@@ -127,14 +120,14 @@ export default function AssetDetailPage() {
         <ChevronLeft size={14} /> Back to Assets
       </Link>
 
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold text-[var(--color-text-primary)]">{asset.name}</h2>
           <p className="text-sm text-[var(--color-text-muted)]">
             {asset.customer?.name} — {asset.customer?.phone}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Link href={`/${prefix}/assets?edit=${asset.id}`}><Button size="sm" variant="secondary"><Pencil size={13} /> Edit</Button></Link>
           <Button size="sm" variant="danger" onClick={() => setShowDelete(true)}><Trash2 size={13} /> Delete</Button>
         </div>
@@ -157,14 +150,14 @@ export default function AssetDetailPage() {
 
         <div className="bg-[var(--color-surface)] rounded-xl p-4 border border-[var(--color-border)] shadow-sm text-sm space-y-3">
           <h3 className="font-medium text-[var(--color-text-secondary)]">AMC Coverage</h3>
-          {asset.hasActiveAmc && activeSub ? (
+          {asset.amcStatus ? (
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5 text-emerald-600 font-medium">
-                <ShieldCheck size={15} /> Active — {activeSub.plan?.name}
+                <ShieldCheck size={15} /> Active — {asset.amcStatus.planName}
               </div>
-              <p className="text-[var(--color-text-muted)]">Valid until {dayjs(activeSub.endDate).format('DD MMM YYYY')}</p>
-              <p className="text-[var(--color-text-muted)]">{activeSub.remainingVisits ?? '—'} of {activeSub.totalVisits} visits remaining</p>
-              <Link href={`/${prefix}/amc/subscriptions/${activeSub.id}`} className="inline-block mt-1 text-xs text-[var(--color-primary)] hover:underline">
+              <p className="text-[var(--color-text-muted)]">Valid until {dayjs(asset.amcStatus.endDate).format('DD MMM YYYY')}</p>
+              <p className="text-[var(--color-text-muted)]">{asset.amcStatus.remainingVisits ?? '—'} of {asset.amcStatus.totalVisits} visits remaining</p>
+              <Link href={`/${prefix}/amc/subscriptions/${asset.amcStatus.subscriptionId}`} className="inline-block mt-1 text-xs text-[var(--color-primary)] hover:underline">
                 View subscription →
               </Link>
             </div>

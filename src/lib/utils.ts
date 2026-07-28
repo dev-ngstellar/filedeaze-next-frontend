@@ -1,9 +1,20 @@
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import dayjs from 'dayjs';
+import type { FocusEvent } from 'react';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+/** Strips a stray leading zero from a numeric `<input type="number">` on blur (e.g. "01500" -> "1500").
+ * Native number inputs don't do this themselves while typing — wire this to onBlur alongside
+ * react-hook-form's own onBlur wherever a leading zero would look like a formatting bug. */
+export function stripLeadingZeroOnBlur(e: FocusEvent<HTMLInputElement>): void {
+  const value = e.target.value;
+  if (/^0\d+/.test(value)) {
+    e.target.value = String(Number(value));
+  }
 }
 
 /** Formats a date for display, e.g. "10 Jul 2026". Returns '—' for null/undefined/invalid input. */
@@ -53,6 +64,31 @@ export function isPastSchedule(value: string | Date | null | undefined): boolean
   return d.isValid() && d.isBefore(dayjs().startOf('day'));
 }
 
+/** True if `value` has more than 2 digits after the decimal point (e.g. 10.999 → true, 10.99 →
+ * false). Mirrors the backend's IsMonetaryAmount decimal-places check exactly. */
+export function hasMoreThanTwoDecimals(value: number): boolean {
+  const decimals = value.toString().split('.')[1];
+  return !!decimals && decimals.length > 2;
+}
+
+/** react-hook-form `validate` rule for a currency amount — mirrors the backend's
+ * IsMonetaryAmount decorator's priority order exactly (type → negative → up to 2 decimal places
+ * → max) so an invalid value is caught before submit with the same message the API would give,
+ * instead of round-tripping for the same rejection (or, worse, showing a different-priority
+ * message than the backend would for the same input). Pass `max` for fields with an established
+ * ceiling (e.g. the ₹100,000 Business Settings cap) — omit it if none exists. */
+export function validateMonetaryAmount(label: string, max?: number) {
+  return (value: number | undefined | null): true | string => {
+    if (value === undefined || value === null || Number.isNaN(value) || !Number.isFinite(value)) {
+      return `${label} must be a valid number`;
+    }
+    if (value < 0) return `${label} cannot be negative`;
+    if (hasMoreThanTwoDecimals(value)) return `${label} can contain up to 2 decimal places`;
+    if (max !== undefined && value > max) return `${label} cannot exceed ₹${max.toLocaleString('en-US')}`;
+    return true;
+  };
+}
+
 /** Extracts a user-friendly message from an Axios/fetch error, with a status-aware fallback.
  * Pass `fallback` to override the final generic string with one specific to the action that
  * failed (e.g. "Failed to create ticket") — it's only used once every other check (backend
@@ -67,7 +103,7 @@ export function getErrorMessage(error: unknown, fallback = 'Something went wrong
   if (status === 403) return "You don't have permission to view this.";
   if (status === 404) return 'The requested data could not be found.';
   if (status && status >= 500) return 'The server ran into a problem. Please try again in a moment.';
-  if (err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message ?? '')) return 'The request timed out. Please check your connection and try again.';
-  if (err?.message === 'Network Error') return 'Unable to reach the server. Please check your internet connection.';
+  if (err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message ?? '')) return 'The request took too long. Please try again.';
+  if (err?.message === 'Network Error') return 'Unable to connect to the server. Please check your internet connection.';
   return fallback;
 }

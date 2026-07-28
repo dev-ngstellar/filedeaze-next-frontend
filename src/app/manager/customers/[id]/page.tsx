@@ -63,7 +63,7 @@ export default function CustomerHistoryPage() {
     <div className="space-y-6">
       {detail && (
         <div className="bg-[var(--color-surface)] rounded-xl p-4 border border-[var(--color-border)] shadow-sm">
-          <div className="flex items-start justify-between">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">{detail.name}</h2>
               <p className="text-sm text-[var(--color-text-muted)]">{detail.phone}{detail.email ? ` · ${detail.email}` : ''}</p>

@@ -18,7 +18,7 @@ import { ErrorState } from '@/components/ui/ErrorState';
 import Link from 'next/link';
 import { Star, CheckCircle, XCircle, RefreshCw, UserCheck, ChevronLeft, CalendarClock, ThumbsUp, ThumbsDown, AlertTriangle, Box, ShieldCheck, ShieldOff, Plus, Pencil, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
-import { getMinimumSelectableDateTime, isPastSchedule, getErrorMessage } from '@/lib/utils';
+import { getMinimumSelectableDateTime, isPastSchedule, getErrorMessage, hasMoreThanTwoDecimals } from '@/lib/utils';
 
 const BUSY_STATUSES = ['ASSIGNED', 'ACCEPTED', 'TRAVELLING', 'REACHED_LOCATION', 'IN_PROGRESS', 'PENDING'];
 
@@ -240,11 +240,36 @@ function PaymentCollectionCard({ ticketId, subCategoryId, isAmcCovered, onCollec
   };
 
   const handleSubmit = () => {
+    const parsedService = Number(serviceCharge);
+    const parsedLabour = Number(labourCharge);
+    const parsedAdditional = Number(additionalCharge);
+    const parsedDiscount = Number(discount);
+    if (
+      (serviceCharge.trim() !== '' && (Number.isNaN(parsedService) || parsedService < 0)) ||
+      (labourCharge.trim() !== '' && (Number.isNaN(parsedLabour) || parsedLabour < 0)) ||
+      (additionalCharge.trim() !== '' && (Number.isNaN(parsedAdditional) || parsedAdditional < 0)) ||
+      (discount.trim() !== '' && (Number.isNaN(parsedDiscount) || parsedDiscount < 0))
+    ) {
+      toast.error('Charges and discount cannot be negative');
+      return;
+    }
+    if (
+      hasMoreThanTwoDecimals(parsedService) || hasMoreThanTwoDecimals(parsedLabour) ||
+      hasMoreThanTwoDecimals(parsedAdditional) || hasMoreThanTwoDecimals(parsedDiscount)
+    ) {
+      toast.error('Charges and discount can contain up to 2 decimal places');
+      return;
+    }
+    if (parsedDiscount > gross) {
+      toast.error('Discount cannot exceed the billable amount');
+      return;
+    }
+
     collectMutation.mutate({
-      serviceCharge: Number(serviceCharge) || 0,
-      labourCharge: Number(labourCharge) || 0,
-      additionalCharge: Number(additionalCharge) || 0,
-      discount: Number(discount) || 0,
+      serviceCharge: parsedService || 0,
+      labourCharge: parsedLabour || 0,
+      additionalCharge: parsedAdditional || 0,
+      discount: parsedDiscount || 0,
       warrantyParts: warrantyParts.map(p => ({ sparePartId: p.sparePartId, quantity: p.quantity })),
       nonWarrantyParts: nonWarrantyParts.map(p => ({ sparePartId: p.sparePartId, quantity: p.quantity })),
       method,
@@ -476,7 +501,7 @@ export default function TicketDetailPage() {
         Back to Tickets
       </Link>
 
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
             <p className="text-sm text-[var(--color-text-muted)] font-mono">{ticket.ticketNumber}</p>
@@ -491,7 +516,7 @@ export default function TicketDetailPage() {
         </div>
         <div className="flex flex-col items-end gap-2">
           <TicketStatusBadge status={ticket.status} />
-          <div className="flex gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             {canAssign && <Button size="sm" onClick={() => { setAssignMode('assign'); resetA({ scheduledAt: defaultScheduleValue(ticket.scheduledAt) }); setShowAssign(true); }}><UserCheck size={13} /> Assign</Button>}
             {canReassign && <Button size="sm" variant="secondary" onClick={() => { setAssignMode('reassign'); resetA({ scheduledAt: defaultScheduleValue(ticket.scheduledAt) }); setShowAssign(true); }}><RefreshCw size={13} /> Reassign</Button>}
             {canReschedule && <Button size="sm" variant="secondary" onClick={() => { setAssignMode('reschedule'); resetA({ scheduledAt: defaultScheduleValue(ticket.scheduledAt) }); setShowAssign(true); }}><CalendarClock size={13} /> Reschedule</Button>}

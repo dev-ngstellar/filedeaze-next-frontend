@@ -11,8 +11,15 @@ let refreshQueue: Array<(token: string | null) => void> = [];
 export const setAccessToken = (token: string | null) => { accessToken = token; };
 export const getAccessToken = () => accessToken;
 
+// Sensible default for normal CRUD/report requests. Uploads get a much longer ceiling below —
+// a single fixed timeout would either be too short for a multi-image upload or too long to ever
+// catch a genuinely hung normal request.
+const DEFAULT_TIMEOUT_MS = 30_000;
+const UPLOAD_TIMEOUT_MS = 120_000;
+
 export const api = axios.create({
   baseURL: BASE_URL,
+  timeout: DEFAULT_TIMEOUT_MS,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -27,6 +34,12 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     }
   } else if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`;
+  }
+  // File/image uploads (multipart) legitimately take longer than a normal API call — give them
+  // a generous ceiling instead of the default CRUD timeout, without every upload call site
+  // needing to remember to set it itself.
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    config.timeout = UPLOAD_TIMEOUT_MS;
   }
   return config;
 });

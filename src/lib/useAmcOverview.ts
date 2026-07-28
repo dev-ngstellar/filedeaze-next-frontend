@@ -10,11 +10,14 @@ export interface AmcOverview {
   expiringCount: number;
   upcomingVisitCount: number;
   isLoading: boolean;
+  isError: boolean;
+  error: unknown;
+  refetch: () => void;
 }
 
 /** Aggregates AMC stats client-side — the backend has no cross-subscription rollup endpoint yet. */
 export function useAmcOverview(): AmcOverview {
-  const { data: activeSubs = [], isLoading: loadingSubs } = useQuery<AmcSubscription[]>({
+  const { data: activeSubs = [], isLoading: loadingSubs, isError: errorSubs, error: subsError, refetch: refetchSubs } = useQuery<AmcSubscription[]>({
     queryKey: ['amc-overview-subscriptions'],
     queryFn: async () => (await api.get('/web/manager/amc/subscriptions', { params: { status: 'ACTIVE' } })).data.data,
     staleTime: 60_000,
@@ -22,7 +25,7 @@ export function useAmcOverview(): AmcOverview {
 
   const subscriptionIds = activeSubs.map(s => s.id);
 
-  const { data: upcomingVisitCount, isLoading: loadingVisits } = useQuery<number>({
+  const { data: upcomingVisitCount, isLoading: loadingVisits, isError: errorVisits, error: visitsError, refetch: refetchVisits } = useQuery<number>({
     queryKey: ['amc-overview-upcoming-visits', subscriptionIds],
     queryFn: async () => {
       const lists = await Promise.all(
@@ -43,5 +46,8 @@ export function useAmcOverview(): AmcOverview {
     expiringCount,
     upcomingVisitCount: subscriptionIds.length > 0 ? upcomingVisitCount ?? 0 : 0,
     isLoading: loadingSubs || (subscriptionIds.length > 0 && loadingVisits),
+    isError: errorSubs || errorVisits,
+    error: subsError ?? visitsError,
+    refetch: () => { refetchSubs(); refetchVisits(); },
   };
 }

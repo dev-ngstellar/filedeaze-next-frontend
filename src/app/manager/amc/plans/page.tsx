@@ -17,7 +17,7 @@ import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Badge } from '@/components/ui/Badge';
 import { PaginationMeta } from '@/components/ui/Pagination';
-import { getErrorMessage } from '@/lib/utils';
+import { getErrorMessage, stripLeadingZeroOnBlur, validateMonetaryAmount } from '@/lib/utils';
 
 type PlanForm = {
   name: string;
@@ -40,6 +40,7 @@ export default function AmcPlansPage() {
   const [deactivateTarget, setDeactivateTarget] = useState<AmcPlan | null>(null);
 
   const { register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm<PlanForm>({ defaultValues: emptyForm });
+  const priceField = register('price', { required: true, validate: validateMonetaryAmount('Price') });
 
   // Cross-field validation, mirrored from the backend (amc-plan.service.ts's validateVisitInterval):
   // the interval can't exceed the duration, and the last generated visit — (visitCount-1) intervals
@@ -186,12 +187,17 @@ export default function AmcPlansPage() {
             <div className="min-h-[86px]">
               <Input
                 label="Interval (months) *" type="number" min={1} step={1}
+                hint="Months between each scheduled visit"
                 error={errors.visitIntervalMonths?.message}
                 {...register('visitIntervalMonths', { required: 'Required', min: { value: 1, message: 'Must be at least 1' }, validate: validateVisitInterval })}
               />
             </div>
             <div className="min-h-[86px]">
-              <Input label="Price (₹) *" type="number" min={0} error={errors.price?.message} {...register('price', { required: true, min: { value: 0, message: 'Cannot be negative' } })} />
+              <Input
+                label="Price (₹) *" type="number" min={0} error={errors.price?.message}
+                {...priceField}
+                onBlur={(e) => { stripLeadingZeroOnBlur(e); priceField.onBlur(e); }}
+              />
             </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">

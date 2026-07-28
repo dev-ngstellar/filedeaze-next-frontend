@@ -15,7 +15,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Badge } from '@/components/ui/Badge';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { useRoleAccent } from '@/lib/useRoleAccent';
-import { cn, getErrorMessage } from '@/lib/utils';
+import { cn, getErrorMessage, hasMoreThanTwoDecimals } from '@/lib/utils';
 import Select from 'react-select'; // They use react-select for multi-select
 
 // ─── Inline Drawer Wrapper ──────────────────────────────────────────────────
@@ -80,7 +80,10 @@ export default function ServiceCatalogPage() {
   const [selectedCatId, setSelectedCatId] = useState<string | null>(null);
 
   // ── Queries
-  const { data: categories = [], isLoading: catsLoading } = useQuery<ServiceCategory[]>({
+  const {
+    data: categories = [], isLoading: catsLoading,
+    isError: catsError, error: catsErr, refetch: refetchCats,
+  } = useQuery<ServiceCategory[]>({
     queryKey: ['service-categories'],
     queryFn: async () => (await api.get('/web/manager/service-categories')).data.data,
   });
@@ -99,6 +102,9 @@ export default function ServiceCatalogPage() {
   });
 
   const isLoading = catsLoading || subsLoading;
+  const isError = catsError || subsError;
+  const listError = catsErr ?? subsErr;
+  const refetchList = () => { refetchCats(); refetchSubs(); };
 
   // ── Filtered Master List
   const filteredCategories = useMemo(() => {
@@ -260,8 +266,17 @@ export default function ServiceCatalogPage() {
     }
 
     for (const sub of draftSubs) {
-      if (!sub.isDeleted && !sub.name.trim()) {
+      if (sub.isDeleted) continue;
+      if (!sub.name.trim()) {
         toast.error('All active services must have a name');
+        return;
+      }
+      if (sub.serviceCharge < 0 || sub.inspectionCharge < 0 || sub.emergencyCharge < 0) {
+        toast.error(`"${sub.name || 'Untitled service'}" has a negative charge — charges cannot be negative`);
+        return;
+      }
+      if (hasMoreThanTwoDecimals(sub.serviceCharge) || hasMoreThanTwoDecimals(sub.inspectionCharge) || hasMoreThanTwoDecimals(sub.emergencyCharge)) {
+        toast.error(`"${sub.name || 'Untitled service'}" has a charge with more than 2 decimal places`);
         return;
       }
     }
@@ -401,6 +416,8 @@ export default function ServiceCatalogPage() {
                   <div key={i} className="h-14 rounded-xl bg-[var(--color-surface-elevated)] animate-pulse" />
                 ))}
               </div>
+            ) : isError ? (
+              <ErrorState title="Unable to load service catalog" error={listError} onRetry={refetchList} />
             ) : filteredCategories.length === 0 ? (
               <div className="py-12 flex flex-col items-center justify-center text-center px-4">
                 <LayoutGrid size={24} className="text-[var(--color-text-muted)] mb-3 opacity-50" />
@@ -673,6 +690,7 @@ export default function ServiceCatalogPage() {
                           type="number"
                           value={sub.serviceCharge || ''}
                           onChange={e => updateDraftSub(index, 'serviceCharge', parseFloat(e.target.value) || 0)}
+                          min={0}
                           className="w-full h-9 px-3 text-[13px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] focus:outline-none"
                         />
                       </div>
@@ -682,6 +700,7 @@ export default function ServiceCatalogPage() {
                           type="number"
                           value={sub.inspectionCharge || ''}
                           onChange={e => updateDraftSub(index, 'inspectionCharge', parseFloat(e.target.value) || 0)}
+                          min={0}
                           className="w-full h-9 px-3 text-[13px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] focus:outline-none"
                         />
                       </div>
@@ -691,6 +710,7 @@ export default function ServiceCatalogPage() {
                           type="number"
                           value={sub.emergencyCharge || ''}
                           onChange={e => updateDraftSub(index, 'emergencyCharge', parseFloat(e.target.value) || 0)}
+                          min={0}
                           className="w-full h-9 px-3 text-[13px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] focus:outline-none"
                         />
                       </div>

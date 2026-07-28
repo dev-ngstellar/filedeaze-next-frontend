@@ -224,7 +224,7 @@ export default function AdminDashboardPage() {
               icon={DollarSign}
               accentHex={accent}
               context={`${data.pendingPaymentsCount || 0} invoice${(data.pendingPaymentsCount || 0) !== 1 ? 's' : ''} awaiting collection`}
-              status="followup"
+              status={(data.pendingPaymentsCount || 0) > 0 ? 'followup' : 'healthy'}
               footerText="Updated today"
               staggerClass="stagger-6"
             />

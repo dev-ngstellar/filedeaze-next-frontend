@@ -16,9 +16,6 @@ import {
     BoxIcon,
     ShieldCheckIcon,
     LayersIcon,
-    UserRoundCheckIcon,
-    MapPinCheckIcon,
-    TriangleAlertIcon,
     LayoutListIcon,
 } from '@animateicons/react/lucide';
 import { cn } from '@/lib/utils';
@@ -42,10 +39,7 @@ const operationsNav: NavItemDef[] = [
 const amcNav: NavItemDef[] = [
     { href: '/manager/amc', label: 'AMC Dashboard', icon: ShieldCheckIcon },
     { href: '/manager/amc/plans', label: 'AMC Plans', icon: LayersIcon },
-    { href: '/manager/amc/assign', label: 'Assign AMC', icon: UserRoundCheckIcon },
-    { href: '/manager/amc/upcoming-visits', label: 'Upcoming Visits', icon: MapPinCheckIcon },
-    { href: '/manager/amc/expiring', label: 'Expiring AMC', icon: TriangleAlertIcon },
-    { href: '/manager/amc/history', label: 'AMC History', icon: LayoutListIcon },
+    { href: '/manager/amc/management', label: 'AMC Management', icon: LayoutListIcon },
 ];
 
 const catalogNav: NavItemDef[] = [

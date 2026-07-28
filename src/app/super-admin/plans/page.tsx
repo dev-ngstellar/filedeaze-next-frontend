@@ -15,14 +15,16 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Pagination, PaginationMeta } from '@/components/ui/Pagination';
-import { cn, getErrorMessage } from '@/lib/utils';
+import { cn, getErrorMessage, hasMoreThanTwoDecimals } from '@/lib/utils';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { requiredString } from '@/lib/validations';
 
 const planSchema = z.object({
   name: requiredString('Plan name is required').max(50, 'Max 50 characters'),
-  price: z.number({ message: 'Price is required' }).min(0, 'Price cannot be negative'),
+  price: z.number({ message: 'Price is required' })
+    .min(0, 'Price cannot be negative')
+    .refine((v) => !hasMoreThanTwoDecimals(v), 'Price can contain up to 2 decimal places'),
   managerLimit: z.number({ message: 'Manager limit is required' }).min(1, 'Manager limit must be greater than 0'),
   technicianLimit: z.number({ message: 'Technician limit is required' }).min(1, 'Technician limit must be greater than 0'),
   ticketLimit: z.number({ message: 'Ticket limit is required' }).min(1, 'Ticket limit must be greater than 0'),

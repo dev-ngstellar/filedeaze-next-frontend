@@ -18,7 +18,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PaginationMeta } from '@/components/ui/Pagination';
-import { getErrorMessage } from '@/lib/utils';
+import { getErrorMessage, validateMonetaryAmount } from '@/lib/utils';
 
 // Backend requires a unitOfMeasure; the manager form no longer collects it, so every part defaults to this.
 const DEFAULT_UNIT_OF_MEASURE = 'unit';
@@ -157,7 +157,7 @@ export default function SparePartsPage() {
             min={0}
             step="0.01"
             error={errors.unitPrice?.message}
-            {...register('unitPrice', { required: true, min: { value: 0, message: 'Cannot be negative' } })}
+            {...register('unitPrice', { required: true, validate: validateMonetaryAmount('Unit price') })}
           />
 
           <div className="flex justify-end gap-3 pt-2">

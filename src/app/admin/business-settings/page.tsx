@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/Button';
 import { FileUpload } from '@/components/ui/FileUpload';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { ErrorState } from '@/components/ui/ErrorState';
-import { cn, getErrorMessage } from '@/lib/utils';
+import { cn, getErrorMessage, stripLeadingZeroOnBlur, validateMonetaryAmount } from '@/lib/utils';
 
 // ─── Sections definition ─────────────────────────────────────────────────────
 const SECTIONS = [
@@ -57,8 +57,16 @@ export default function BusinessSettingsPage() {
 
   // ─── Forms ──────────────────────────────────────────────────────────────────
   const companyForm = useForm<Omit<CompanySettings, 'id' | 'logoUrl' | 'email'>>();
+  const { errors: companyErrors } = companyForm.formState;
   const tenantForm = useForm<Omit<TenantSettings, 'id' | 'upiQrImageUrl'>>();
+  const { errors: tenantErrors } = tenantForm.formState;
+  const gstPercentField = tenantForm.register('gstPercent', {
+    valueAsNumber: true,
+    min: { value: 0, message: 'GST percentage cannot be negative' },
+    max: { value: 28, message: 'GST percentage cannot exceed 28%' },
+  });
   const platformForm = useForm<Omit<AppSettings, 'id'>>();
+  const { errors: platformErrors } = platformForm.formState;
 
   // Custom mock form for UI-only settings (Invoice footer, Terms, Business hours, etc.)
   const mockForm = useForm({
@@ -109,7 +117,6 @@ export default function BusinessSettingsPage() {
   useEffect(() => {
     if (appData) {
       platformForm.reset({
-        platformFee: appData.platformFee ?? 0,
         taxPercentage: appData.taxPercentage ?? 0,
         shippingCharge: appData.shippingCharge ?? 0,
         handlingCharge: appData.handlingCharge ?? 0,
@@ -367,15 +374,27 @@ export default function BusinessSettingsPage() {
               </div>
 
               <form className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input label="Company Name" {...companyForm.register('companyName')} />
+                <Input
+                  label="Company Name" maxLength={150} hint="Maximum 150 characters"
+                  error={companyErrors.companyName?.message}
+                  {...companyForm.register('companyName', { maxLength: { value: 150, message: 'Company name can contain up to 150 characters' } })}
+                />
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-[var(--color-text-secondary)]">Business Email</label>
                   <p className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-3 py-2 text-sm text-[var(--color-text-muted)] select-all h-[38px] flex items-center font-mono">
                     {companyData?.email ?? '—'}
                   </p>
                 </div>
-                <Input label="Contact Person" {...companyForm.register('contactPerson')} />
-                <Input label="Phone Number" {...companyForm.register('phone')} />
+                <Input
+                  label="Contact Person" maxLength={100} hint="Maximum 100 characters"
+                  error={companyErrors.contactPerson?.message}
+                  {...companyForm.register('contactPerson', { maxLength: { value: 100, message: 'Contact person can contain up to 100 characters' } })}
+                />
+                <Input
+                  label="Phone Number" maxLength={20} hint="Maximum 20 characters"
+                  error={companyErrors.phone?.message}
+                  {...companyForm.register('phone', { maxLength: { value: 20, message: 'Phone number can contain up to 20 characters' } })}
+                />
               </form>
             </div>
           </div>
@@ -394,11 +413,27 @@ export default function BusinessSettingsPage() {
 
             <form className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
-                <Input label="Address" {...companyForm.register('address')} />
+                <Input
+                  label="Address" maxLength={255} hint="Maximum 255 characters"
+                  error={companyErrors.address?.message}
+                  {...companyForm.register('address', { maxLength: { value: 255, message: 'Address can contain up to 255 characters' } })}
+                />
               </div>
-              <Input label="City" {...companyForm.register('city')} />
-              <Input label="State" {...companyForm.register('state')} />
-              <Input label="Pincode" {...companyForm.register('pincode')} />
+              <Input
+                label="City" maxLength={100} hint="Maximum 100 characters"
+                error={companyErrors.city?.message}
+                {...companyForm.register('city', { maxLength: { value: 100, message: 'City can contain up to 100 characters' } })}
+              />
+              <Input
+                label="State" maxLength={100} hint="Maximum 100 characters"
+                error={companyErrors.state?.message}
+                {...companyForm.register('state', { maxLength: { value: 100, message: 'State can contain up to 100 characters' } })}
+              />
+              <Input
+                label="Pincode" maxLength={10} hint="Maximum 10 characters"
+                error={companyErrors.pincode?.message}
+                {...companyForm.register('pincode', { maxLength: { value: 10, message: 'Pincode can contain up to 10 characters' } })}
+              />
             </form>
           </div>
 
@@ -436,11 +471,23 @@ export default function BusinessSettingsPage() {
                     label="GST Percentage (%)"
                     type="number"
                     step="0.01"
-                    {...tenantForm.register('gstPercent', { valueAsNumber: true })}
+                    min={0}
+                    max={28}
+                    error={tenantErrors.gstPercent?.message}
+                    {...gstPercentField}
+                    onBlur={(e) => { stripLeadingZeroOnBlur(e); gstPercentField.onBlur(e); }}
                   />
                 )}
-                <Input label="Invoice Prefix" placeholder="INV-" {...tenantForm.register('invoicePrefix')} />
-                <Input label="Invoice Number Format" placeholder="0001" {...tenantForm.register('invoiceNumberFormat')} />
+                <Input
+                  label="Invoice Prefix" placeholder="INV-" maxLength={10} hint="Maximum 10 characters"
+                  error={tenantErrors.invoicePrefix?.message}
+                  {...tenantForm.register('invoicePrefix', { maxLength: { value: 10, message: 'Invoice prefix can contain up to 10 characters' } })}
+                />
+                <Input
+                  label="Invoice Number Format" placeholder="0001" maxLength={50} hint="Maximum 50 characters"
+                  error={tenantErrors.invoiceNumberFormat?.message}
+                  {...tenantForm.register('invoiceNumberFormat', { maxLength: { value: 50, message: 'Invoice number format can contain up to 50 characters' } })}
+                />
               </div>
 
               {/* UI Mock Fields */}
@@ -488,8 +535,18 @@ export default function BusinessSettingsPage() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input label="UPI ID" placeholder="name@upi" {...tenantForm.register('upiId')} />
-                <Input label="UPI Account Name" placeholder="e.g. John Doe" {...tenantForm.register('upiAccountName')} />
+                <Input
+                  label="UPI ID" placeholder="name@upi"
+                  error={tenantErrors.upiId?.message}
+                  {...tenantForm.register('upiId', {
+                    pattern: { value: /^[\w.-]{2,256}@[a-zA-Z]{2,64}$/, message: 'Please provide a valid UPI ID (e.g. name@bank)' },
+                  })}
+                />
+                <Input
+                  label="UPI Account Name" placeholder="e.g. John Doe" maxLength={100} hint="Maximum 100 characters"
+                  error={tenantErrors.upiAccountName?.message}
+                  {...tenantForm.register('upiAccountName', { maxLength: { value: 100, message: 'UPI account name can contain up to 100 characters' } })}
+                />
 
                 {/* Default payment mock select */}
                 <div className="md:col-span-2">
@@ -524,20 +581,11 @@ export default function BusinessSettingsPage() {
               </div>
               <div>
                 <h3 className="font-semibold text-base text-[var(--color-text-primary)]">Business Charges</h3>
-                <p className="text-xs text-[var(--color-text-muted)]">Set platform fees, additional shipping and handling metrics.</p>
+                <p className="text-xs text-[var(--color-text-muted)]">Set additional shipping and handling metrics.</p>
               </div>
             </div>
 
             <form className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="md:col-span-2">
-                <Input
-                  label="Platform Service Fee (₹)"
-                  type="number"
-                  step="0.01"
-                  {...platformForm.register('platformFee', { valueAsNumber: true })}
-                />
-              </div>
-
               <div className="p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] space-y-3">
                 <div className="flex items-center gap-2.5">
                   <input type="checkbox" id="shippingEnabled" {...platformForm.register('shippingEnabled')} className="h-4 w-4" />
@@ -547,7 +595,13 @@ export default function BusinessSettingsPage() {
                   label="Shipping Charge (₹)"
                   type="number"
                   step="0.01"
-                  {...platformForm.register('shippingCharge', { valueAsNumber: true })}
+                  min={0}
+                  max={100000}
+                  error={platformErrors.shippingCharge?.message}
+                  {...platformForm.register('shippingCharge', {
+                    valueAsNumber: true,
+                    validate: validateMonetaryAmount('Shipping charge', 100000),
+                  })}
                 />
               </div>
 
@@ -560,7 +614,13 @@ export default function BusinessSettingsPage() {
                   label="Handling Charge (₹)"
                   type="number"
                   step="0.01"
-                  {...platformForm.register('handlingCharge', { valueAsNumber: true })}
+                  min={0}
+                  max={100000}
+                  error={platformErrors.handlingCharge?.message}
+                  {...platformForm.register('handlingCharge', {
+                    valueAsNumber: true,
+                    validate: validateMonetaryAmount('Handling charge', 100000),
+                  })}
                 />
               </div>
             </form>
@@ -596,7 +656,14 @@ export default function BusinessSettingsPage() {
                     label="Rate (%)"
                     type="number"
                     step="0.01"
-                    {...platformForm.register(`${period}Discount` as keyof Omit<AppSettings, 'id'>, { valueAsNumber: true })}
+                    min={0}
+                    max={100}
+                    error={platformErrors[`${period}Discount` as keyof typeof platformErrors]?.message as string | undefined}
+                    {...platformForm.register(`${period}Discount` as keyof Omit<AppSettings, 'id'>, {
+                      valueAsNumber: true,
+                      min: { value: 0, message: 'Discount cannot be negative' },
+                      max: { value: 100, message: 'Discount cannot exceed 100%' },
+                    })}
                     placeholder="%"
                   />
                 </div>

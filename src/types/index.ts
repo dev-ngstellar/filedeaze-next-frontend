@@ -364,6 +364,7 @@ export interface CustomerAsset {
   isActive: boolean;
   ticketCount?: number;
   hasActiveAmc?: boolean;
+  amcStatus?: AmcStatusSummary | null;
   images?: CustomerAssetImage[];
   createdAt: string;
   updatedAt: string;
@@ -707,7 +708,6 @@ export interface TenantSettings {
 
 export interface AppSettings {
   id: string;
-  platformFee: number;
   taxPercentage: number;
   shippingCharge: number;
   handlingCharge: number;

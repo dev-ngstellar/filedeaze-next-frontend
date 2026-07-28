@@ -72,7 +72,7 @@ export default function TenantsPage() {
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
-  const { data: tenants = [], isLoading } = useQuery<Tenant[]>({
+  const { data: tenants = [], isLoading, isError, error, refetch } = useQuery<Tenant[]>({
     queryKey: ['tenants', params],
     queryFn: async () => (await api.get('/web/super-admin/tenants', {
       params: Object.fromEntries(Object.entries(params).filter(([, v]) => v)),
@@ -272,7 +272,7 @@ export default function TenantsPage() {
       </FilterCard>
 
       {/* Table */}
-      <DataTable data={filteredTenants} columns={columns} isLoading={isLoading} />
+      <DataTable data={filteredTenants} columns={columns} isLoading={isLoading} isError={isError} error={error} onRetry={refetch} />
 
 
       {/* Create Tenant Modal */}

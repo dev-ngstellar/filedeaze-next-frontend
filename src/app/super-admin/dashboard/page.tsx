@@ -135,7 +135,7 @@ export default function SuperAdminDashboardPage() {
               />
               <div className="absolute opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10 bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-[var(--color-surface-elevated)] border border-[var(--color-border)] rounded-lg p-3 shadow-lg text-xs text-[var(--color-text-secondary)] pointer-events-none">
                 <p className="font-semibold text-[var(--color-text-primary)] mb-1">Active Users Metric</p>
-                Represents the total number of users across all tenants who have logged in or interacted with the platform in the last 30 days.
+                Total number of enabled (non-disabled) user accounts across all tenants, excluding Super Admins. Reflects current account status, not recent login activity.
                 <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-[var(--color-surface-elevated)] border-b border-r border-[var(--color-border)] transform rotate-45"></div>
               </div>
             </div>

@@ -293,12 +293,12 @@ export default function PaymentHistoryPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight text-[var(--color-text-primary)]">Payment History</h2>
           <p className="mt-0.5 text-sm text-[var(--color-text-muted)]">Subscription payment records across all tenants</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="secondary" size="sm" onClick={() => exportCsv(billings)} disabled={!billings.length}>
             <Download size={13} /> CSV
           </Button>

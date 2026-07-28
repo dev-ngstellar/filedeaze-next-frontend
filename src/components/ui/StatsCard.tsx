@@ -367,10 +367,10 @@ function PrimaryCard({
   return (
     <CardShell accentHex={accentHex} staggerClass={staggerClass} className="px-5 pt-5 pb-4">
       {/* Top row */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2.5">
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <div className="flex items-center gap-2.5 min-w-0">
           {Icon && <IconBadge Icon={Icon} accentHex={accentHex} size={14} />}
-          <span className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--color-text-muted)]">
+          <span className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--color-text-muted)] truncate">
             {title}
           </span>
         </div>
@@ -410,10 +410,10 @@ function StandardCard({
   return (
     <CardShell accentHex={accentHex} staggerClass={staggerClass} className="px-4 pt-4 pb-3.5">
       {/* Top: icon row */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2 min-w-0">
           {Icon && <IconBadge Icon={Icon} accentHex={accentHex} size={13} />}
-          <span className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--color-text-muted)]">
+          <span className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--color-text-muted)] truncate">
             {title}
           </span>
         </div>
@@ -449,10 +449,10 @@ function StatusCard({
   return (
     <CardShell accentHex={accentHex} staggerClass={staggerClass} className="px-4 pt-4 pb-3.5">
       {/* Top row */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2 min-w-0">
           {Icon && <IconBadge Icon={Icon} accentHex={accentHex} size={13} />}
-          <span className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--color-text-muted)]">
+          <span className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--color-text-muted)] truncate">
             {title}
           </span>
         </div>

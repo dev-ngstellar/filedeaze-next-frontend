@@ -7,6 +7,7 @@ import { AppNotification } from '@/types';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { ErrorState } from '@/components/ui/ErrorState';
 import { Bell, Check, Trash2, MailOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
@@ -21,7 +22,7 @@ export default function NotificationsPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  const { data: notifications = [], isLoading } = useQuery<AppNotification[]>({
+  const { data: notifications = [], isLoading, isError, error, refetch } = useQuery<AppNotification[]>({
     queryKey: ['notifications'],
     queryFn: async () => (await api.get('/mobile/notifications')).data.data,
   });
@@ -94,7 +95,9 @@ export default function NotificationsPage() {
 
       {/* Notifications List */}
       <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] shadow-sm overflow-hidden">
-        {notifications.length === 0 ? (
+        {isError ? (
+          <ErrorState title="Unable to load notifications" error={error} onRetry={() => refetch()} />
+        ) : notifications.length === 0 ? (
           <EmptyState message="No notifications" description="You're all caught up!" icon={Bell} />
         ) : (
           <div className="divide-y divide-[var(--color-border)]">

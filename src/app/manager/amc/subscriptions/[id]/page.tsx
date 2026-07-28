@@ -118,14 +118,14 @@ export default function AmcSubscriptionDetailPage() {
         <ChevronLeft size={14} /> Back to AMC History
       </Link>
 
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold text-[var(--color-text-primary)]">{sub.plan?.name}</h2>
           <p className="text-sm text-[var(--color-text-muted)]">{sub.customer?.name} — {sub.customerAsset?.name}</p>
         </div>
         <div className="flex flex-col items-end gap-2">
           <AmcSubscriptionStatusBadge status={sub.status} />
-          <div className="flex gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             {canScheduleVisit && <Button size="sm" onClick={() => setShowSchedule(true)}><CalendarPlus size={13} /> Schedule Visit</Button>}
             {canRenew && <Button size="sm" variant="secondary" onClick={() => setShowRenew(true)}><RefreshCw size={13} /> Renew</Button>}
             {canCancel && <Button size="sm" variant="danger" onClick={() => setShowCancel(true)}><Ban size={13} /> Cancel</Button>}

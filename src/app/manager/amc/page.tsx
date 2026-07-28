@@ -7,6 +7,8 @@ import { ShieldCheck, Layers, UserRoundCheck, MapPinCheck, TriangleAlert, ListCh
 import api from '@/lib/axios';
 import { AmcPlan } from '@/types';
 import { StatsCard } from '@/components/ui/StatsCard';
+import { ErrorState } from '@/components/ui/ErrorState';
+import { PageSpinner } from '@/components/ui/Spinner';
 import { useAmcOverview } from '@/lib/useAmcOverview';
 import { useRoleAccent } from '@/lib/useRoleAccent';
 
@@ -16,7 +18,7 @@ export default function AmcDashboardPage() {
   const accent = useRoleAccent();
   const overview = useAmcOverview();
 
-  const { data: plans = [] } = useQuery<AmcPlan[]>({
+  const { data: plans = [], isLoading: loadingPlans, isError: plansError, error: plansErr, refetch: refetchPlans } = useQuery<AmcPlan[]>({
     queryKey: ['amc-plans-all'],
     queryFn: async () => (await api.get('/web/manager/amc/plans')).data.data,
   });
@@ -36,20 +38,30 @@ export default function AmcDashboardPage() {
         <p className="text-sm text-[var(--color-text-muted)] mt-0.5">Annual Maintenance Contract overview</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Link href={`/${prefix}/amc/history?status=ACTIVE`}>
-          <StatsCard title="Active Subscriptions" value={overview.activeCount} icon={ShieldCheck} accentHex={accent} status="active" footerText="Live" />
-        </Link>
-        <Link href={`/${prefix}/amc/expiring`}>
-          <StatsCard title="Expiring ≤ 30 Days" value={overview.expiringCount} icon={TriangleAlert} accentHex={accent} status={overview.expiringCount > 0 ? 'attention' : 'stable'} footerText="Live" />
-        </Link>
-        <Link href={`/${prefix}/amc/upcoming-visits`}>
-          <StatsCard title="Upcoming Visits ≤ 7 Days" value={overview.upcomingVisitCount} icon={MapPinCheck} accentHex={accent} status="ontrack" footerText="Live" />
-        </Link>
-        <Link href={`/${prefix}/amc/plans`}>
-          <StatsCard title="Total Plans" value={plans.length} icon={Layers} accentHex={accent} status="stable" footerText="Live" />
-        </Link>
-      </div>
+      {overview.isLoading || loadingPlans ? (
+        <PageSpinner />
+      ) : overview.isError || plansError ? (
+        <ErrorState
+          title="Unable to load AMC overview"
+          error={overview.error ?? plansErr}
+          onRetry={() => { overview.refetch(); refetchPlans(); }}
+        />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Link href={`/${prefix}/amc/history?status=ACTIVE`}>
+            <StatsCard title="Active Subscriptions" value={overview.activeCount} icon={ShieldCheck} accentHex={accent} status="active" footerText="Live" />
+          </Link>
+          <Link href={`/${prefix}/amc/expiring`}>
+            <StatsCard title="Expiring ≤ 30 Days" value={overview.expiringCount} icon={TriangleAlert} accentHex={accent} status={overview.expiringCount > 0 ? 'attention' : 'stable'} footerText="Live" />
+          </Link>
+          <Link href={`/${prefix}/amc/upcoming-visits`}>
+            <StatsCard title="Upcoming Visits ≤ 7 Days" value={overview.upcomingVisitCount} icon={MapPinCheck} accentHex={accent} status="ontrack" footerText="Live" />
+          </Link>
+          <Link href={`/${prefix}/amc/plans`}>
+            <StatsCard title="Total Plans" value={plans.length} icon={Layers} accentHex={accent} status="stable" footerText="Live" />
+          </Link>
+        </div>
+      )}
 
       <div>
         <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-3">Quick Actions</h3>
