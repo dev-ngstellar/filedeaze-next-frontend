@@ -25,7 +25,8 @@ export default function ServiceSubCategoriesPage() {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<ServiceSubCategory | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ServiceSubCategory | null>(null);
+  const [unmapTarget, setUnmapTarget] = useState<SubCategorySkill | null>(null);
   const [chargingId, setChargingId] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [skillsFor, setSkillsFor] = useState<ServiceSubCategory | null>(null);
@@ -63,7 +64,7 @@ export default function ServiceSubCategoriesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/web/manager/service-sub-categories/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sub-categories'] }); toast.success('Deleted'); setDeleteId(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sub-categories'] }); toast.success('Sub-category deactivated'); setDeleteTarget(null); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to delete sub-category')),
   });
 
@@ -87,7 +88,7 @@ export default function ServiceSubCategoriesPage() {
   });
   const unmapSkillMutation = useMutation({
     mutationFn: (skillId: string) => api.delete(`/web/manager/service-sub-categories/${skillsFor!.id}/skills/${skillId}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sub-category-skills', skillsFor?.id] }); toast.success('Skill removed'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sub-category-skills', skillsFor?.id] }); toast.success('Skill removed'); setUnmapTarget(null); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to remove skill')),
   });
 
@@ -110,7 +111,7 @@ export default function ServiceSubCategoriesPage() {
           <Button variant="ghost" size="sm" onClick={() => openEdit(row.original)}><Pencil size={14} /></Button>
           <Button variant="ghost" size="sm" onClick={() => setSkillsFor(row.original)} title="Manage Skills"><Tag size={14} /></Button>
           <Button variant="ghost" size="sm" onClick={() => { const c = row.original.serviceCharges; setChargingId(row.original.id); resetC({ serviceCharge: c?.serviceCharge ?? 0, inspectionCharge: c?.inspectionCharge ?? 0, emergencyCharge: c?.emergencyCharge ?? 0 }); }} title="Set Charges"><DollarSign size={14} /></Button>
-          <Button variant="ghost" size="sm" onClick={() => setDeleteId(row.original.id)} className="text-red-500"><Trash2 size={14} /></Button>
+          <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(row.original)} className="text-red-500"><Trash2 size={14} /></Button>
         </div>
       ),
     },
@@ -184,7 +185,7 @@ export default function ServiceSubCategoriesPage() {
                   <span className="font-medium">{ms.skill.name}</span>
                   <button
                     type="button"
-                    onClick={() => unmapSkillMutation.mutate(ms.skillId)}
+                    onClick={() => setUnmapTarget(ms)}
                     disabled={unmapSkillMutation.isPending}
                     className="text-[var(--color-text-muted)] hover:text-red-500 transition-colors disabled:opacity-40"
                     title="Remove"
@@ -216,7 +217,25 @@ export default function ServiceSubCategoriesPage() {
         </div>
       </Modal>
 
-      <ConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} message="Delete this sub category?" loading={deleteMutation.isPending} />
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        title={`Deactivate ${deleteTarget?.name ?? 'this sub-category'}?`}
+        message={`"${deleteTarget?.name ?? 'This sub-category'}" will be hidden from the active service catalog.`}
+        confirmLabel="Deactivate"
+        loading={deleteMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={!!unmapTarget}
+        onClose={() => setUnmapTarget(null)}
+        onConfirm={() => unmapTarget && unmapSkillMutation.mutate(unmapTarget.skillId)}
+        title={`Remove ${unmapTarget?.skill.name ?? 'this skill'}?`}
+        message={`${unmapTarget?.skill.name ?? 'This skill'} will no longer be required for ${skillsFor?.name ?? 'this sub-category'}, which may change which technicians are recommended for it.`}
+        confirmLabel="Remove"
+        loading={unmapSkillMutation.isPending}
+      />
     </div>
   );
 }

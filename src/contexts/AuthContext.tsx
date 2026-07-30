@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { User, UserRole } from '@/types';
-import { setAccessToken } from '@/lib/axios';
+import { api, setAccessToken } from '@/lib/axios';
 import { getPortalPrefix, setCookie, getCookie, eraseCookie } from '@/lib/auth-helper';
 
 interface AuthContextValue {
@@ -11,7 +11,7 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   role: UserRole | null;
-  setAuth: (user: User, accessToken: string, refreshToken: string) => void;
+  setAuth: (user: User, accessToken: string, refreshToken: string, portal?: 'sa' | 'tenant') => void;
   clearAuth: () => void;
 }
 
@@ -24,38 +24,82 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const prefix = getPortalPrefix(pathname);
 
   useEffect(() => {
-    setIsLoading(true);
-    const stored = localStorage.getItem(`${prefix}_user`);
-    const rt = localStorage.getItem(`${prefix}_refreshToken`);
-    if (stored && rt) {
-      try {
-        setUser(JSON.parse(stored));
-        // Restore access token from sessionStorage/cookie so API calls work after a hard reload
-        const at = sessionStorage.getItem(`${prefix}_accessToken`) || getCookie(`${prefix}_accessToken`);
-        if (at) {
-          setAccessToken(at);
-        } else {
-          setUser(null);
-        }
-      } catch {
+    let cancelled = false;
+
+    async function hydrate() {
+      setIsLoading(true);
+      const stored = localStorage.getItem(`${prefix}_user`);
+      const rt = localStorage.getItem(`${prefix}_refreshToken`);
+      if (!stored || !rt) {
         setUser(null);
-        localStorage.removeItem(`${prefix}_user`);
+        setIsLoading(false);
+        return;
       }
-    } else {
-      setUser(null);
+
+      let restoredUser: User;
+      try {
+        restoredUser = JSON.parse(stored);
+      } catch {
+        localStorage.removeItem(`${prefix}_user`);
+        setUser(null);
+        setIsLoading(false);
+        return;
+      }
+
+      // Restore access token from sessionStorage/cookie so API calls work after a hard reload.
+      const at = sessionStorage.getItem(`${prefix}_accessToken`) || getCookie(`${prefix}_accessToken`);
+      if (at) {
+        setAccessToken(at);
+        setUser(restoredUser);
+        setIsLoading(false);
+        return;
+      }
+
+      // Access token missing but the refresh token is still here — this is a recoverable state
+      // (closed tab, expired 1-day access cookie, etc.), NOT a logout. Previously this branch did
+      // setUser(null) unconditionally, which discarded an otherwise-valid tenant session and
+      // bounced the user out to the shared /login page — the trigger for the tenant-admin →
+      // super-admin redirect bug. Try a silent refresh first, exactly like the axios 401
+      // interceptor already does for expired-mid-request tokens.
+      try {
+        const { data } = await api.post('/auth/refresh', { refreshToken: rt });
+        const { accessToken: newAt, refreshToken: newRt } = data.data.tokens;
+        if (cancelled) return;
+        setAccessToken(newAt);
+        sessionStorage.setItem(`${prefix}_accessToken`, newAt);
+        localStorage.setItem(`${prefix}_refreshToken`, newRt);
+        setCookie(`${prefix}_accessToken`, newAt, 1);
+        setCookie(`${prefix}_refreshToken`, newRt, 7);
+        setUser(restoredUser);
+      } catch {
+        if (cancelled) return;
+        setAccessToken(null);
+        localStorage.removeItem(`${prefix}_refreshToken`);
+        localStorage.removeItem(`${prefix}_user`);
+        setUser(null);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
     }
-    setIsLoading(false);
+
+    hydrate();
+    return () => { cancelled = true; };
   }, [prefix]);
 
-  const setAuth = useCallback((u: User, at: string, rt: string) => {
-    const currentPrefix = getPortalPrefix();
+  // `portal` lets a caller state explicitly which bucket this session belongs to, instead of
+  // guessing from the current URL — needed because the shared /login page authenticates BOTH
+  // Super Admin and tenant users from the same ambiguous "/login" pathname, where a guess can't
+  // tell the two apart. Callers on an unambiguous route (e.g. the per-tenant login page under
+  // /admin/:tenantCode/login) can omit it and fall back to the path-based prefix.
+  const setAuth = useCallback((u: User, at: string, rt: string, portal?: 'sa' | 'tenant') => {
+    const currentPrefix = portal ?? getPortalPrefix();
     setUser(u);
     setAccessToken(at);
-    
+
     sessionStorage.setItem(`${currentPrefix}_accessToken`, at);
     localStorage.setItem(`${currentPrefix}_refreshToken`, rt);
     localStorage.setItem(`${currentPrefix}_user`, JSON.stringify(u));
-    
+
     setCookie(`${currentPrefix}_accessToken`, at, 1);
     setCookie(`${currentPrefix}_refreshToken`, rt, 7);
   }, []);

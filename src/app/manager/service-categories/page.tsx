@@ -23,7 +23,7 @@ export default function ServiceCategoriesPage() {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<ServiceCategory | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ServiceCategory | null>(null);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
 
@@ -47,7 +47,7 @@ export default function ServiceCategoriesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/web/manager/service-categories/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['service-categories'] }); toast.success('Deleted'); setDeleteId(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['service-categories'] }); toast.success('Category deleted'); setDeleteTarget(null); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to delete category')),
   });
 
@@ -59,7 +59,7 @@ export default function ServiceCategoriesPage() {
       cell: ({ row }) => (
         <div className="flex gap-2">
           <Button variant="ghost" size="sm" onClick={() => openEdit(row.original)}><Pencil size={14} /></Button>
-          <Button variant="ghost" size="sm" onClick={() => setDeleteId(row.original.id)} className="text-red-500"><Trash2 size={14} /></Button>
+          <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(row.original)} className="text-red-500"><Trash2 size={14} /></Button>
         </div>
       ),
     },
@@ -93,7 +93,15 @@ export default function ServiceCategoriesPage() {
         </form>
       </Modal>
 
-      <ConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} message="Delete this category?" loading={deleteMutation.isPending} />
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        title={`Deactivate ${deleteTarget?.name ?? 'this category'}?`}
+        message={`"${deleteTarget?.name ?? 'This category'}" will be hidden from the active service catalog. Its sub-categories are not deleted.`}
+        confirmLabel="Deactivate"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

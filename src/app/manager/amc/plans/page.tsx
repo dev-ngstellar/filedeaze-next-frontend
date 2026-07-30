@@ -105,10 +105,13 @@ export default function AmcPlansPage() {
   });
 
   const updateMutation = useMutation({
+    // categoryId must be sent as `null` (not omitted) when the user clears it back to "Any" —
+    // PATCH treats an omitted key as "leave unchanged", not "clear it", so `|| undefined` here
+    // would silently no-op instead of reverting the plan to unrestricted.
     mutationFn: (d: PlanForm) => api.patch(`/web/manager/amc/plans/${editing!.id}`, {
       name: d.name.trim(),
       description: d.description.trim() || undefined,
-      categoryId: d.categoryId || undefined,
+      categoryId: d.categoryId || null,
       durationMonths: Number(d.durationMonths),
       visitCount: Number(d.visitCount),
       visitIntervalMonths: Number(d.visitIntervalMonths),

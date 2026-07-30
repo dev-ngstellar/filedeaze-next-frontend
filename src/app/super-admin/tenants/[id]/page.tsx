@@ -33,6 +33,9 @@ import dayjs from 'dayjs';
 import { Users, CreditCard, Calendar, Download, QrCode, Building2, ChevronLeft, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { cn, getErrorMessage } from '@/lib/utils';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+
+type SubAction = 'renew' | 'suspend' | 'resume' | 'cancel' | 'upgrade-downgrade';
 
 export default function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -90,6 +93,7 @@ export default function TenantDetailPage() {
   const currentSub = tenant?.subscription ?? null;
   const [newPlanId, setNewPlanId] = useState('');
   const [udPaymentStatus, setUdPaymentStatus] = useState('PAID');
+  const [confirmAction, setConfirmAction] = useState<SubAction | null>(null);
 
   const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: ['tenant', id] });
@@ -99,7 +103,7 @@ export default function TenantDetailPage() {
 
   const renewMutation = useMutation({
     mutationFn: () => api.post('/web/super-admin/subscriptions/renew', { tenantId: id, paymentStatus: 'PENDING' }),
-    onSuccess: (res) => { toast.success(res.data.message ?? 'Subscription renewed'); invalidateAll(); },
+    onSuccess: (res) => { toast.success(res.data.message ?? 'Subscription renewed'); invalidateAll(); setConfirmAction(null); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to renew subscription')),
   });
 
@@ -109,25 +113,25 @@ export default function TenantDetailPage() {
       const direction = Number(newPlan?.price) > Number(currentPlan?.price ?? 0) ? 'upgrade' : 'downgrade';
       return api.patch(`/web/super-admin/subscriptions/${currentSub!.id}/${direction}`, { planId: newPlanId, paymentStatus: udPaymentStatus });
     },
-    onSuccess: (res) => { toast.success(res.data.message ?? 'Plan changed'); setNewPlanId(''); invalidateAll(); },
+    onSuccess: (res) => { toast.success(res.data.message ?? 'Plan changed'); setNewPlanId(''); invalidateAll(); setConfirmAction(null); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to change plan')),
   });
 
   const suspendSubMutation = useMutation({
     mutationFn: () => api.patch(`/web/super-admin/subscriptions/${currentSub!.id}/suspend`),
-    onSuccess: () => { toast.success('Subscription suspended'); invalidateAll(); },
+    onSuccess: () => { toast.success('Subscription suspended'); invalidateAll(); setConfirmAction(null); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to suspend subscription')),
   });
 
   const resumeSubMutation = useMutation({
     mutationFn: () => api.patch(`/web/super-admin/subscriptions/${currentSub!.id}/resume`),
-    onSuccess: (res) => { toast.success(res.data.message ?? 'Subscription resumed'); invalidateAll(); },
+    onSuccess: (res) => { toast.success(res.data.message ?? 'Subscription resumed'); invalidateAll(); setConfirmAction(null); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to resume subscription')),
   });
 
   const cancelSubMutation = useMutation({
     mutationFn: () => api.patch(`/web/super-admin/subscriptions/${currentSub!.id}/cancel`),
-    onSuccess: () => { toast.success('Subscription cancelled'); invalidateAll(); },
+    onSuccess: () => { toast.success('Subscription cancelled'); invalidateAll(); setConfirmAction(null); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to cancel subscription')),
   });
 
@@ -315,20 +319,19 @@ export default function TenantDetailPage() {
               <div className="flex flex-wrap gap-2">
                 {['ACTIVE', 'TRIAL'].includes(currentSub.status) && (
                   <>
-                    <Button size="sm" variant="secondary" loading={renewMutation.isPending} onClick={() => renewMutation.mutate()}>Renew</Button>
-                    <Button size="sm" variant="outline" className="border-red-200 text-red-600 hover:bg-red-50" loading={suspendSubMutation.isPending} onClick={() => suspendSubMutation.mutate()}>Suspend</Button>
+                    <Button size="sm" variant="secondary" onClick={() => setConfirmAction('renew')}>Renew</Button>
+                    <Button size="sm" variant="outline" className="border-red-200 text-red-600 hover:bg-red-50" onClick={() => setConfirmAction('suspend')}>Suspend</Button>
                   </>
                 )}
                 {currentSub.status === 'SUSPENDED' && (
-                  <Button size="sm" loading={resumeSubMutation.isPending} onClick={() => resumeSubMutation.mutate()}>Resume</Button>
+                  <Button size="sm" onClick={() => setConfirmAction('resume')}>Resume</Button>
                 )}
                 {currentSub.status !== 'CANCELLED' && (
                   <Button
                     size="sm"
                     variant="outline"
                     className="border-red-200 text-red-600 hover:bg-red-50"
-                    loading={cancelSubMutation.isPending}
-                    onClick={() => { if (window.confirm('Cancel this subscription? The tenant will lose access.')) cancelSubMutation.mutate(); }}
+                    onClick={() => setConfirmAction('cancel')}
                   >
                     Cancel
                   </Button>
@@ -353,7 +356,7 @@ export default function TenantDetailPage() {
                       onChange={e => setUdPaymentStatus(e.target.value)}
                       className="w-32"
                     />
-                    <Button size="sm" disabled={!newPlanId} loading={upgradeDowngradeMutation.isPending} onClick={() => upgradeDowngradeMutation.mutate()}>Apply</Button>
+                    <Button size="sm" disabled={!newPlanId} onClick={() => setConfirmAction('upgrade-downgrade')}>Apply</Button>
                   </div>
                 </div>
               )}
@@ -526,6 +529,46 @@ export default function TenantDetailPage() {
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!confirmAction}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => {
+          if (confirmAction === 'renew') renewMutation.mutate();
+          else if (confirmAction === 'suspend') suspendSubMutation.mutate();
+          else if (confirmAction === 'resume') resumeSubMutation.mutate();
+          else if (confirmAction === 'cancel') cancelSubMutation.mutate();
+          else if (confirmAction === 'upgrade-downgrade') upgradeDowngradeMutation.mutate();
+        }}
+        loading={
+          renewMutation.isPending || suspendSubMutation.isPending || resumeSubMutation.isPending ||
+          cancelSubMutation.isPending || upgradeDowngradeMutation.isPending
+        }
+        tone={confirmAction === 'suspend' || confirmAction === 'cancel' ? 'danger' : 'neutral'}
+        title={
+          confirmAction === 'renew' ? `Renew ${tenant.companyName}'s subscription?` :
+          confirmAction === 'suspend' ? `Suspend ${tenant.companyName}'s subscription?` :
+          confirmAction === 'resume' ? `Resume ${tenant.companyName}'s subscription?` :
+          confirmAction === 'cancel' ? `Cancel ${tenant.companyName}'s subscription?` :
+          confirmAction === 'upgrade-downgrade' ? `Change ${tenant.companyName}'s plan?` :
+          ''
+        }
+        message={
+          confirmAction === 'renew' ? `This renews the current plan (${currentPlan?.name ?? '—'}) for another billing cycle, marked as payment pending.` :
+          confirmAction === 'suspend' ? `${tenant.companyName} will immediately lose access until the subscription is resumed.` :
+          confirmAction === 'resume' ? `${tenant.companyName} will regain access to their account.` :
+          confirmAction === 'cancel' ? `${tenant.companyName} will lose access once cancelled. This does not delete their data.` :
+          confirmAction === 'upgrade-downgrade' ? `${tenant.companyName} will move from ${currentPlan?.name ?? 'their current plan'} to ${plans.find(p => p.id === newPlanId)?.name ?? 'the selected plan'}.` :
+          ''
+        }
+        confirmLabel={
+          confirmAction === 'renew' ? 'Renew' :
+          confirmAction === 'suspend' ? 'Suspend' :
+          confirmAction === 'resume' ? 'Resume' :
+          confirmAction === 'cancel' ? 'Cancel Subscription' :
+          confirmAction === 'upgrade-downgrade' ? 'Apply' : 'Confirm'
+        }
+      />
     </div>
   );
 }

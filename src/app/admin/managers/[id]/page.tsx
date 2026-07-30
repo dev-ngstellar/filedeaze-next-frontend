@@ -39,7 +39,11 @@ export default function ManagerDetailPage() {
 
   const updateMutation = useMutation({
     mutationFn: (d: Pick<Manager, 'name' | 'phone' | 'isActive'>) => api.patch(`/web/admin/managers/${id}`, d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manager', id] }); toast.success('Updated'); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['manager', id] });
+      qc.invalidateQueries({ queryKey: ['managers'] });
+      toast.success('Updated');
+    },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to update manager')),
   });
 

@@ -29,23 +29,36 @@ export default function TechniciansReportPage() {
 
   useEffect(() => setMounted(true), []);
 
-  const { data = [], isLoading, isError, error, refetch, isFetching } = useQuery<TechnicianReportRow[]>({
+  const { data: reportData, isLoading, isError, error, refetch, isFetching } = useQuery<{
+    rows: TechnicianReportRow[];
+    activeToday: number;
+    totalPossibleDays: number;
+  }>({
     queryKey: ['technicians-report', params],
     queryFn: async () => {
-      const raw: { id: string; name: string; rating: number; _count: { tickets: number; attendance: number } }[] =
-        (await api.get('/web/admin/reports/technicians', { params })).data.data;
-      return raw.map(t => ({ id: t.id, name: t.name, totalTickets: t._count.tickets, attendanceDays: t._count.attendance, rating: t.rating ?? 0 })) as unknown as TechnicianReportRow[];
+      const raw: {
+        technicians: { id: string; name: string; rating: number; _count: { tickets: number; attendance: number } }[];
+        activeToday: number;
+        totalPossibleDays: number;
+      } = (await api.get('/web/admin/reports/technicians', { params })).data.data;
+      const rows = raw.technicians.map(t => ({
+        id: t.id, name: t.name, totalTickets: t._count.tickets, attendanceDays: t._count.attendance, rating: t.rating ?? 0,
+      })) as unknown as TechnicianReportRow[];
+      return { rows, activeToday: raw.activeToday, totalPossibleDays: raw.totalPossibleDays };
     },
     staleTime: 30_000,
     retry: 1,
   });
 
-  // Calculate KPIs
+  const data = reportData?.rows ?? [];
+
+  // Calculate KPIs — activeToday and totalPossibleDays now come from the backend, computed from
+  // real Attendance rows and the actual selected date range (see admin.service.ts).
   const totalTechnicians = data.length;
-  const activeToday = Math.floor(totalTechnicians * 0.85); // Mocked
+  const activeToday = reportData?.activeToday ?? 0;
 
   const totalJobs = data.reduce((sum, t) => sum + t.totalTickets, 0);
-  const totalPossibleDays = 22; // Mocked working days in a month
+  const totalPossibleDays = reportData?.totalPossibleDays ?? 1;
   const totalAttendance = data.reduce((sum, t) => sum + t.attendanceDays, 0);
   const attendanceRate = totalTechnicians > 0 ? Math.round((totalAttendance / (totalTechnicians * totalPossibleDays)) * 100) : 0;
 

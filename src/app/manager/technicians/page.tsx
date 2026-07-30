@@ -1,14 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { ColumnDef } from '@tanstack/react-table';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Plus, Eye, Trash2 } from 'lucide-react';
+import { Plus, Eye, Trash2, X } from 'lucide-react';
 import Link from 'next/link';
 import api from '@/lib/axios';
 import { Technician, Skill } from '@/types';
@@ -26,7 +26,10 @@ import dayjs from 'dayjs';
 const schema = z.object({
   name: z.string().min(1, 'Name is required (e.g. Siva Kumar)'),
   email: z.string().min(1, 'Email is required').refine(v => v.includes('@') && v.includes('.'), 'Enter a valid email (e.g. siva@gmail.com)'),
-  phone: z.string().min(10, 'Enter a valid phone number (e.g. 9876543210)').max(15, 'Phone number too long'),
+  // Matches the backend's exact accepted format (create-technician.dto.ts: /^[6-9]\d{9}$/) —
+  // a 10-digit Indian mobile number starting with 6-9 — so a value valid here is never rejected
+  // by the API, and vice versa.
+  phone: z.string().trim().regex(/^[6-9]\d{9}$/, 'Please enter a valid 10-digit mobile number'),
   password: z.string().min(6, 'Password must be at least 6 characters (e.g. Siva@123)'),
 });
 
@@ -35,20 +38,33 @@ type Form = z.infer<typeof schema>;
 export default function TechniciansPage() {
   const qc = useQueryClient();
   const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const prefix = pathname.startsWith('/admin/') ? 'admin' : 'manager';
   const [showCreate, setShowCreate] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Technician | null>(null);
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
+  // Drill-down from the Admin Dashboard's "Available Technicians" card — same isActive + no
+  // active-status-ticket rule as AdminService.getDashboard(), enforced server-side.
+  const [availableOnly, setAvailableOnly] = useState(searchParams.get('available') === 'true');
 
   const { data, isLoading, isError, error, refetch } = useQuery<{ items: Technician[]; meta: PaginationMeta }>({
-    queryKey: ['technicians', page, limit],
-    queryFn: async () => (await api.get('/web/manager/technicians', { params: { page, limit } })).data.data,
+    queryKey: ['technicians', page, limit, availableOnly],
+    queryFn: async () => (await api.get('/web/manager/technicians', {
+      params: { page, limit, ...(availableOnly && { available: 'true' }) },
+    })).data.data,
     placeholderData: keepPreviousData,
   });
 
   const techs = data?.items ?? [];
+
+  const clearAvailableFilter = () => {
+    setAvailableOnly(false);
+    setPage(1);
+    router.replace(pathname);
+  };
 
   // Onboarding offers only active Master Skills — creating a technician has no dedicated
   // "with skills" endpoint, so skills are attached right after creation succeeds.
@@ -93,7 +109,7 @@ export default function TechniciansPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/web/manager/technicians/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['technicians'] }); toast.success('Deleted'); setDeleteId(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['technicians'] }); toast.success('Technician removed'); setDeleteTarget(null); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to delete technician')),
   });
 
@@ -109,7 +125,7 @@ export default function TechniciansPage() {
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
           <Link href={`/${prefix}/technicians/${row.original.id}`}><Button variant="ghost" size="sm"><Eye size={14} /></Button></Link>
-          <Button variant="ghost" size="sm" onClick={() => setDeleteId(row.original.id)} className="text-red-500"><Trash2 size={14} /></Button>
+          <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(row.original)} className="text-red-500"><Trash2 size={14} /></Button>
         </div>
       ),
     },
@@ -121,6 +137,24 @@ export default function TechniciansPage() {
         <h2 className="text-xl font-semibold text-[var(--color-text-primary)]">Technicians</h2>
         <Button onClick={() => setShowCreate(true)}><Plus size={15} /> Add Technician</Button>
       </div>
+
+      {availableOnly && (
+        <div className="mb-4 flex items-center gap-2 text-sm">
+          <span className="text-[var(--color-text-muted)]">Active filter:</span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-primary-light)] border border-[var(--color-primary-ring)] pl-3 pr-1.5 py-1 text-xs font-medium text-[var(--color-primary)]">
+            Available Technicians
+            <button
+              type="button"
+              onClick={clearAvailableFilter}
+              aria-label="Clear Available Technicians filter"
+              className="flex items-center justify-center rounded-full h-4 w-4 hover:bg-[var(--color-primary)]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] transition-colors"
+            >
+              <X size={11} />
+            </button>
+          </span>
+        </div>
+      )}
+
       <DataTable
         data={techs}
         columns={columns}
@@ -170,7 +204,15 @@ export default function TechniciansPage() {
         </form>
       </Modal>
 
-      <ConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} message="Remove this technician?" loading={deleteMutation.isPending} />
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        title={`Remove ${deleteTarget?.name ?? 'this technician'}?`}
+        message={`${deleteTarget?.name ?? 'This technician'} will no longer be able to access technician features or be assigned new tickets.`}
+        confirmLabel="Remove"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

@@ -12,16 +12,6 @@ import { useRoleAccent } from '@/lib/useRoleAccent';
 import Link from 'next/link';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-const mockTrendData = [
-  { name: 'Jan', revenue: 4000, tenants: 24 },
-  { name: 'Feb', revenue: 3000, tenants: 28 },
-  { name: 'Mar', revenue: 2000, tenants: 32 },
-  { name: 'Apr', revenue: 2780, tenants: 39 },
-  { name: 'May', revenue: 1890, tenants: 48 },
-  { name: 'Jun', revenue: 2390, tenants: 56 },
-  { name: 'Jul', revenue: 3490, tenants: 63 },
-];
-
 export default function SuperAdminDashboardPage() {
   const ACCENT = useRoleAccent();
   const [mounted, setMounted] = useState(false);
@@ -151,7 +141,7 @@ export default function SuperAdminDashboardPage() {
               </div>
               <div className="h-64 min-w-0">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={mockTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <AreaChart data={data.revenueTrend ?? []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor={ACCENT} stopOpacity={0.3}/>
@@ -159,7 +149,7 @@ export default function SuperAdminDashboardPage() {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }} dy={10} />
+                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }} dy={10} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }} dx={-10} tickFormatter={(val) => `₹${val/1000}k`} />
                     <Tooltip
                       contentStyle={{ backgroundColor: 'var(--color-surface-elevated)', borderRadius: '8px', border: '1px solid var(--color-border)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}
@@ -170,6 +160,9 @@ export default function SuperAdminDashboardPage() {
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
+              {!data.revenueTrend?.some(p => p.revenue > 0) && (
+                <p className="text-xs text-[var(--color-text-muted)] text-center -mt-2">No revenue recorded for this period</p>
+              )}
             </div>
 
             <div className="min-w-0 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
@@ -179,7 +172,7 @@ export default function SuperAdminDashboardPage() {
               </div>
               <div className="h-64 min-w-0">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={mockTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <AreaChart data={data.tenantGrowth ?? []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorTenants" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
@@ -187,7 +180,7 @@ export default function SuperAdminDashboardPage() {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }} dy={10} />
+                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }} dy={10} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }} dx={-10} />
                     <Tooltip
                       contentStyle={{ backgroundColor: 'var(--color-surface-elevated)', borderRadius: '8px', border: '1px solid var(--color-border)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}

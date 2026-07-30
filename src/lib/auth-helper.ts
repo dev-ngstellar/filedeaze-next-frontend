@@ -1,33 +1,33 @@
-export function getPortalPrefix(pathname?: string, hostname?: string): 'sa' | 'tenant' {
-  // If running in browser:
+import type { UserRole } from '@/types';
+
+// Deliberately PATH-ONLY — no hostname guessing. Hostname-based heuristics (bare `localhost`,
+// `admin.*`, etc.) cannot distinguish "a tenant admin testing on localhost" from "a super admin on
+// localhost", and using that guess to decide which portal's stored session to trust let a stale
+// Super Admin session (left over in this browser from unrelated testing) get silently restored
+// for a Tenant Admin whenever they landed on the shared /login page — this is exactly the bug that
+// let a refreshed Tenant Admin session resolve into the Super Admin portal. /admin/* and
+// /manager/* both use the shared 'tenant' storage bucket (role itself, not the bucket, tells them
+// apart); only /super-admin/* is unambiguous by path. Any other (ambiguous) path — "/", "/login" —
+// safely defaults to the lower-privilege 'tenant' bucket and never guesses 'sa'.
+export function getPortalPrefix(pathname?: string): 'sa' | 'tenant' {
   const path = pathname ?? (typeof window !== 'undefined' ? window.location.pathname : '');
-  const host = hostname ?? (typeof window !== 'undefined' ? window.location.hostname : '');
-  
   if (path.startsWith('/super-admin')) {
     return 'sa';
   }
-  if (path.startsWith('/admin') || path.startsWith('/manager')) {
-    return 'tenant';
-  }
-  
-  // For shared /login page or other root paths:
-  // Check if we are on a super admin host
-  const isSuperAdminHost = (h: string) => {
-    if (h === 'localhost' || h === '127.0.0.1') return true;
-    return (
-      h === 'admin.localhost' ||
-      h === 'admin.fieldeaze.com' ||
-      h === 'fieldeaze.ngstellar.com' ||
-      h.startsWith('admin.')
-    );
-  };
-  const isVercelMain = host.includes('vercel.app') && !host.startsWith('tenant-');
-  
-  if (isSuperAdminHost(host) || isVercelMain) {
-    return 'sa';
-  }
-  
   return 'tenant';
+}
+
+/** Single source of truth for "which portal does this role land in" — reused by the root page
+ * and the shared login page instead of each keeping its own copy. An unrecognized/unknown role
+ * (including null/undefined, e.g. auth still hydrating) intentionally resolves to null, never to
+ * the Super Admin portal — callers must treat null as "go to /login", not silently pick a default. */
+export function getHomeRouteForRole(role: UserRole | null | undefined): string | null {
+  switch (role) {
+    case 'SUPER_ADMIN': return '/super-admin/dashboard';
+    case 'ADMIN': return '/admin/dashboard';
+    case 'MANAGER': return '/manager/dashboard';
+    default: return null;
+  }
 }
 
 export function setCookie(name: string, value: string, days?: number) {

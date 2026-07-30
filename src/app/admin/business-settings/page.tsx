@@ -68,21 +68,6 @@ export default function BusinessSettingsPage() {
   const platformForm = useForm<Omit<AppSettings, 'id'>>();
   const { errors: platformErrors } = platformForm.formState;
 
-  // Custom mock form for UI-only settings (Invoice footer, Terms, Business hours, etc.)
-  const mockForm = useForm({
-    defaultValues: {
-      invoiceFooter: 'Thank you for your business!',
-      termsAndConditions: 'All services are guaranteed for 30 days. Payments are non-refundable.',
-      upiEnabled: true,
-      defaultPayment: 'UPI',
-      timezone: 'Asia/Kolkata (IST)',
-      workingDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'],
-      openingTime: '09:00',
-      closingTime: '18:00',
-      lunchBreak: '13:00 - 14:00',
-    }
-  });
-
   // Watch GST state from tenant settings
   const gstEnabled = tenantForm.watch('gstEnabled');
 
@@ -197,8 +182,7 @@ export default function BusinessSettingsPage() {
   const isDirty =
     companyForm.formState.isDirty ||
     tenantForm.formState.isDirty ||
-    platformForm.formState.isDirty ||
-    mockForm.formState.isDirty;
+    platformForm.formState.isDirty;
 
   const isSaving =
     companyMutation.isPending ||
@@ -210,7 +194,6 @@ export default function BusinessSettingsPage() {
     companyForm.reset();
     tenantForm.reset();
     platformForm.reset();
-    mockForm.reset();
     toast.info('Changes discarded');
   };
 
@@ -228,14 +211,8 @@ export default function BusinessSettingsPage() {
         promises.push(platformMutation.mutateAsync(platformForm.getValues()));
       }
 
-      if (mockForm.formState.isDirty) {
-        // Mock fields saved successfully locally
-        mockForm.reset(mockForm.getValues());
-      }
-
-      if (promises.length > 0) {
-        await Promise.all(promises);
-      }
+      if (promises.length === 0) return;
+      await Promise.all(promises);
       toast.success('All settings saved successfully');
     } catch {
       // Each mutation's own onError already surfaced the specific section and reason that failed.
@@ -490,15 +467,22 @@ export default function BusinessSettingsPage() {
                 />
               </div>
 
-              {/* UI Mock Fields */}
+              {/* Not yet a real backend setting — disabled and clearly labeled rather than
+                  accepting edits that silently discard on refresh (see CRUD-03 fix). */}
               <div className="grid grid-cols-1 gap-4 pt-2 border-t border-[var(--color-border)]">
-                <Input label="Invoice Footer" {...mockForm.register('invoiceFooter')} />
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wide">Invoice Footer &amp; Terms</span>
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--color-surface-elevated)] border border-[var(--color-border)] text-[var(--color-text-muted)]">Not available yet</span>
+                </div>
+                <Input label="Invoice Footer" value="Thank you for your business!" disabled />
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-medium text-[var(--color-text-secondary)]">Terms &amp; Conditions</label>
                   <textarea
-                    {...mockForm.register('termsAndConditions')}
+                    value="All services are guaranteed for 30 days. Payments are non-refundable."
+                    disabled
+                    readOnly
                     rows={3}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] outline-none focus:border-[var(--color-primary)] transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] text-sm text-[var(--color-text-muted)] outline-none cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -518,22 +502,6 @@ export default function BusinessSettingsPage() {
             </div>
 
             <form className="space-y-4">
-              {/* UI Mock UPI Toggle */}
-              <div className="flex items-center gap-3 bg-[var(--color-surface-elevated)] p-3.5 rounded-xl border border-[var(--color-border)]">
-                <input
-                  type="checkbox"
-                  id="upiEnabled"
-                  {...mockForm.register('upiEnabled')}
-                  className="h-4.5 w-4.5 rounded border-[var(--color-border-strong)] text-[var(--color-primary)] focus:ring-[var(--color-primary-ring)]"
-                />
-                <div>
-                  <label htmlFor="upiEnabled" className="text-sm font-semibold text-[var(--color-text-primary)] cursor-pointer">
-                    Enable UPI Payments
-                  </label>
-                  <p className="text-[11px] text-[var(--color-text-muted)]">Activate digital wallet and direct bank UPI options.</p>
-                </div>
-              </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
                   label="UPI ID" placeholder="name@upi"
@@ -547,28 +515,34 @@ export default function BusinessSettingsPage() {
                   error={tenantErrors.upiAccountName?.message}
                   {...tenantForm.register('upiAccountName', { maxLength: { value: 100, message: 'UPI account name can contain up to 100 characters' } })}
                 />
+              </div>
 
-                {/* Default payment mock select */}
-                <div className="md:col-span-2">
-                  <Select
-                    label="Default Payment Method"
-                    options={[
-                      { value: 'Cash', label: 'Cash' },
-                      { value: 'UPI', label: 'UPI / Digital Wallet' },
-                      { value: 'Card', label: 'Credit/Debit Card' },
-                    ]}
-                    {...mockForm.register('defaultPayment')}
-                  />
+              {/* Not yet real backend settings — disabled and clearly labeled rather than
+                  accepting edits that silently discard on refresh (see CRUD-03 fix). The UPI
+                  ID/Account Name fields above are real and always active regardless of this. */}
+              <div className="pt-2 border-t border-[var(--color-border)] space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wide">Payment Method Preferences</span>
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--color-surface-elevated)] border border-[var(--color-border)] text-[var(--color-text-muted)]">Not available yet</span>
                 </div>
-
-                {/* <div className="md:col-span-2">
-                  <p className="text-xs font-semibold text-[var(--color-text-secondary)] mb-2">UPI QR Image</p>
-                  <FileUpload
-                    onFile={file => upiQrMutation.mutate(file)}
-                    loading={upiQrMutation.isPending}
-                    preview={tenantData?.upiQrImageUrl}
-                  />
-                </div> */}
+                <div className="flex items-center gap-3 bg-[var(--color-surface-elevated)] p-3.5 rounded-xl border border-[var(--color-border)] opacity-70">
+                  <input type="checkbox" checked disabled className="h-4.5 w-4.5 rounded border-[var(--color-border-strong)]" />
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--color-text-primary)]">Enable UPI Payments</p>
+                    <p className="text-[11px] text-[var(--color-text-muted)]">Activate digital wallet and direct bank UPI options.</p>
+                  </div>
+                </div>
+                <Select
+                  label="Default Payment Method"
+                  disabled
+                  value="UPI"
+                  options={[
+                    { value: 'Cash', label: 'Cash' },
+                    { value: 'UPI', label: 'UPI / Digital Wallet' },
+                    { value: 'Card', label: 'Credit/Debit Card' },
+                  ]}
+                  onChange={() => {}}
+                />
               </div>
             </form>
           </div>

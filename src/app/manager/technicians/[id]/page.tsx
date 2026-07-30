@@ -26,7 +26,7 @@ export default function TechnicianDetailPage() {
   const techniciansBase = pathname.startsWith('/admin/') ? '/admin/technicians' : '/manager/technicians';
   const qc = useQueryClient();
   const [showResetPw, setShowResetPw] = useState(false);
-  const [removeSkillId, setRemoveSkillId] = useState<string | null>(null);
+  const [removeSkillTarget, setRemoveSkillTarget] = useState<TechnicianSkill | null>(null);
   const [routeDate, setRouteDate] = useState(dayjs().format('YYYY-MM-DD'));
 
   const { data: tech, isLoading, isError, error, refetch, isFetching } = useQuery<Technician>({ queryKey: ['technician', id], queryFn: async () => (await api.get(`/web/manager/technicians/${id}`)).data.data });
@@ -37,13 +37,21 @@ export default function TechnicianDetailPage() {
   const { data: location } = useQuery({ queryKey: ['tech-location', id], queryFn: async () => (await api.get(`/web/manager/technicians/${id}/location`)).data.data, refetchInterval: 30_000 });
   const { data: route } = useQuery({ queryKey: ['tech-route', id, routeDate], queryFn: async () => (await api.get(`/web/manager/technicians/${id}/route`, { params: { date: routeDate } })).data.data });
 
-  const { register: ri, handleSubmit: hi, reset: resetI, formState: { isSubmitting: si } } = useForm<Pick<Technician, 'name' | 'phone' | 'isActive'>>();
+  const { register: ri, handleSubmit: hi, reset: resetI, formState: { isSubmitting: si, errors: errorsI } } = useForm<Pick<Technician, 'name' | 'phone' | 'isActive'>>();
   const { register: rp, handleSubmit: hp, reset: resetP, formState: { isSubmitting: sp } } = useForm<{ newPassword: string }>();
   const { register: rs, handleSubmit: hs, reset: resetS, formState: { isSubmitting: ss } } = useForm<{ skillId: string }>();
 
   useEffect(() => { if (tech) resetI({ name: tech.name, phone: tech.phone, isActive: tech.isActive }); }, [tech, resetI]);
 
-  const updateMutation = useMutation({ mutationFn: (d: Pick<Technician, 'name' | 'phone' | 'isActive'>) => api.patch(`/web/manager/technicians/${id}`, d), onSuccess: () => { qc.invalidateQueries({ queryKey: ['technician', id] }); toast.success('Updated'); }, onError: (err) => toast.error(getErrorMessage(err, 'Failed to update technician')) });
+  const updateMutation = useMutation({
+    mutationFn: (d: Pick<Technician, 'name' | 'phone' | 'isActive'>) => api.patch(`/web/manager/technicians/${id}`, d),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['technician', id] });
+      qc.invalidateQueries({ queryKey: ['technicians'] });
+      toast.success('Updated');
+    },
+    onError: (err) => toast.error(getErrorMessage(err, 'Failed to update technician')),
+  });
   const resetPwMutation = useMutation({ mutationFn: (d: { newPassword: string }) => api.patch(`/web/manager/technicians/${id}/reset-password`, d), onSuccess: () => { toast.success('Password reset'); setShowResetPw(false); resetP(); }, onError: (err) => toast.error(getErrorMessage(err, 'Failed to reset password')) });
   const addSkillMutation = useMutation({
     mutationFn: (d: { skillId: string }) =>
@@ -53,7 +61,7 @@ export default function TechnicianDetailPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['tech-skills', id] }); toast.success('Skill added'); resetS(); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to add skill')),
   });
-  const removeSkillMutation = useMutation({ mutationFn: (skillId: string) => api.delete(`/web/manager/technicians/${id}/skills/${skillId}`), onSuccess: () => { qc.invalidateQueries({ queryKey: ['tech-skills', id] }); toast.success('Skill removed'); setRemoveSkillId(null); }, onError: (err) => toast.error(getErrorMessage(err, 'Failed to remove skill')) });
+  const removeSkillMutation = useMutation({ mutationFn: (skillId: string) => api.delete(`/web/manager/technicians/${id}/skills/${skillId}`), onSuccess: () => { qc.invalidateQueries({ queryKey: ['tech-skills', id] }); toast.success('Skill removed'); setRemoveSkillTarget(null); }, onError: (err) => toast.error(getErrorMessage(err, 'Failed to remove skill')) });
 
   if (isLoading) return <PageSpinner />;
   if (isError) return <ErrorState error={error} onRetry={refetch} isRetrying={isFetching} />;
@@ -82,7 +90,13 @@ export default function TechnicianDetailPage() {
         <h3 className="font-medium text-[var(--color-text-secondary)] mb-4">Edit Info</h3>
         <form onSubmit={hi(d => updateMutation.mutate(d))} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input label="Name" {...ri('name')} />
-          <Input label="Phone" {...ri('phone')} />
+          <Input
+            label="Phone"
+            error={errorsI.phone?.message}
+            {...ri('phone', {
+              pattern: { value: /^[6-9]\d{9}$/, message: 'Please enter a valid 10-digit mobile number' },
+            })}
+          />
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-[var(--color-text-muted)]">Email</label>
             <p className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-3 py-2 text-sm text-[var(--color-text-muted)] select-all">{tech.email ?? '—'}</p>
@@ -119,7 +133,7 @@ export default function TechnicianDetailPage() {
                   <span className="font-medium">{ts.skill.name}</span>
                   {ts.certificationNumber && <span className="ml-2 text-[var(--color-text-muted)] text-xs">{ts.certificationNumber}</span>}
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => setRemoveSkillId(ts.skillId)} className="text-red-400"><Trash2 size={13} /></Button>
+                <Button variant="ghost" size="sm" onClick={() => setRemoveSkillTarget(ts)} className="text-red-400"><Trash2 size={13} /></Button>
               </div>
             ))}
           </div>
@@ -134,7 +148,15 @@ export default function TechnicianDetailPage() {
       </Modal>
 
 
-      <ConfirmDialog open={!!removeSkillId} onClose={() => setRemoveSkillId(null)} onConfirm={() => removeSkillId && removeSkillMutation.mutate(removeSkillId)} message="Remove this skill?" loading={removeSkillMutation.isPending} confirmLabel="Remove" />
+      <ConfirmDialog
+        open={!!removeSkillTarget}
+        onClose={() => setRemoveSkillTarget(null)}
+        onConfirm={() => removeSkillTarget && removeSkillMutation.mutate(removeSkillTarget.skillId)}
+        title={`Remove ${removeSkillTarget?.skill.name ?? 'this skill'}?`}
+        message={`${tech?.name ?? 'This technician'} will no longer be listed as skilled in ${removeSkillTarget?.skill.name ?? 'this skill'} for job recommendations.`}
+        confirmLabel="Remove"
+        loading={removeSkillMutation.isPending}
+      />
     </div>
   );
 }

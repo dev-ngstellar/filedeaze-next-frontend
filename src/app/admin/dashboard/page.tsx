@@ -2,8 +2,8 @@
 
 import { useQuery } from '@tanstack/react-query';
 import {
-  Ticket, Users, DollarSign, UserCheck, AlertTriangle,
-  Plus, UserPlus, BarChart2, Settings, Zap, ArrowRight, ShieldCheck, MapPinCheck,
+  Ticket, Users, DollarSign, UserCheck, AlertTriangle, ClipboardList, CheckCircle2, Receipt,
+  Plus, UserPlus, BarChart2, Settings, Zap, ArrowRight, ChevronRight, ShieldCheck, MapPinCheck,
 } from 'lucide-react';
 import Link from 'next/link';
 import api from '@/lib/axios';
@@ -15,7 +15,7 @@ import { ErrorState } from '@/components/ui/ErrorState';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { useRoleAccent } from '@/lib/useRoleAccent';
-import { useAmcOverview } from '@/lib/useAmcOverview';
+import { useAmcOverview, AmcOverview } from '@/lib/useAmcOverview';
 
 /* ── Greeting helper ──────────────────────────────────── */
 function getGreeting() {
@@ -66,6 +66,60 @@ const QUICK_ACTIONS = [
     bg: 'bg-[var(--color-warning-light)] dark:bg-[var(--color-warning)]/10',
   },
 ];
+
+/* ── Needs Attention ──────────────────────────────────── */
+function NeedsAttention({ data, amc }: { data: AdminDashboard; amc: AmcOverview }) {
+  const items: { key: string; text: string; href: string }[] = [];
+
+  if (data.pendingAssignments > 0) {
+    items.push({ key: 'pending-assignments', text: `${data.pendingAssignments} ticket${data.pendingAssignments !== 1 ? 's' : ''} awaiting assignment`, href: '/admin/tickets?status=NEW_TICKET' });
+  }
+  if (data.overdueTickets > 0) {
+    items.push({ key: 'overdue', text: `${data.overdueTickets} overdue ticket${data.overdueTickets !== 1 ? 's' : ''}`, href: '/admin/tickets?overdue=true' });
+  }
+  if (!amc.isLoading && !amc.isError && amc.expiringCount > 0) {
+    items.push({ key: 'amc-expiring', text: `${amc.expiringCount} AMC contract${amc.expiringCount !== 1 ? 's' : ''} expiring soon`, href: '/admin/amc/expiring' });
+  }
+  if (data.pendingPayments > 0) {
+    items.push({ key: 'payments-verify', text: `${data.pendingPayments} payment${data.pendingPayments !== 1 ? 's' : ''} awaiting verification`, href: '/admin/payments?status=COLLECTED' });
+  }
+  if (data.paymentsAwaitingCollection > 0) {
+    items.push({ key: 'payments-collect', text: `${data.paymentsAwaitingCollection} completed ticket${data.paymentsAwaitingCollection !== 1 ? 's' : ''} awaiting payment collection`, href: '/admin/tickets?awaitingCollection=true' });
+  }
+
+  return (
+    <div>
+      <h3 className="text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--color-text-muted)] mb-3">
+        Needs Attention
+      </h3>
+      <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm p-2">
+        {items.length === 0 ? (
+          <div className="flex items-center gap-2.5 text-sm text-[var(--color-text-secondary)] p-3">
+            <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
+            Nothing needs your attention right now.
+          </div>
+        ) : (
+          <ul className="divide-y divide-[var(--color-border)]">
+            {items.map(item => (
+              <li key={item.key}>
+                <Link
+                  href={item.href}
+                  className="group flex items-center gap-2.5 text-sm text-[var(--color-text-secondary)] rounded-xl px-3 py-2.5 cursor-pointer hover:bg-[var(--color-surface-elevated)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] transition-colors"
+                >
+                  <AlertTriangle size={15} className="text-amber-500 shrink-0" />
+                  <span className="flex-1">{item.text}</span>
+                  <span className="flex items-center gap-1 text-xs font-medium text-[var(--color-primary)] opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                    View <ChevronRight size={13} />
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function AdminDashboardPage() {
   const accent = useRoleAccent();
@@ -150,7 +204,7 @@ export default function AdminDashboardPage() {
       {isLoading ? (
         <div className="space-y-7">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from({ length: 5 }).map((_, i) => (
+            {Array.from({ length: 6 }).map((_, i) => (
               <SkeletonCard key={i} />
             ))}
           </div>
@@ -167,68 +221,73 @@ export default function AdminDashboardPage() {
         <>
           {/* ── KPI Cards ───────────────────────────────── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <StatsCard
-              title="Total Tickets"
-              value={data.totalTickets}
-              icon={Ticket}
-              accentHex={accent}
-              context={`+${data.newTicketsToday} new ticket${data.newTicketsToday !== 1 ? 's' : ''} created today`}
-              status="live"
-              footerText="Updated 2 mins ago"
-              staggerClass="stagger-1"
-            />
-            <StatsCard
-              title="Open Tickets"
-              value={data.openTickets}
-              icon={Ticket}
-              accentHex={accent}
-              context={`${data.unassignedTickets} awaiting technician assignment`}
-              status="attention"
-              footerText="Live"
-              staggerClass="stagger-2"
-            />
-            <StatsCard
-              title="Total Technicians"
-              value={data.totalTechnicians}
-              icon={Users}
-              accentHex={accent}
-              context={`${data.availableTechnicians} currently available`}
-              status="available"
-              footerText="Updated now"
-              staggerClass="stagger-3"
-            />
-            <StatsCard
-              title="Total Customers"
-              value={data.totalCustomers}
-              icon={UserCheck}
-              accentHex={accent}
-              context={`+${data.newCustomersThisWeek} new customer${data.newCustomersThisWeek !== 1 ? 's' : ''} this week`}
-              status="growing"
-              footerText="Updated today"
-              staggerClass="stagger-4"
-            />
-            <StatsCard
-              title="Monthly Revenue"
-              value={`₹${(data.monthlyRevenue || 0).toLocaleString()}`}
-              icon={DollarSign}
-              accentHex={accent}
-              context={`₹${(data.revenueToday || 0).toLocaleString()} collected today`}
-              trend={{ label: `${(data.revenueTrendPercent || 0) >= 0 ? '+' : ''}${data.revenueTrendPercent || 0}%`, direction: (data.revenueTrendPercent || 0) >= 0 ? 'up' : 'down' }}
-              status="growing"
-              footerText="Updated just now"
-              staggerClass="stagger-5"
-            />
-            <StatsCard
-              title="Pending Payments"
-              value={`₹${(data.pendingPaymentsAmount || 0).toLocaleString()}`}
-              icon={DollarSign}
-              accentHex={accent}
-              context={`${data.pendingPaymentsCount || 0} invoice${(data.pendingPaymentsCount || 0) !== 1 ? 's' : ''} awaiting collection`}
-              status={(data.pendingPaymentsCount || 0) > 0 ? 'followup' : 'healthy'}
-              footerText="Updated today"
-              staggerClass="stagger-6"
-            />
+            <Link href="/admin/tickets?open=true" className="block rounded-2xl cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2">
+              <StatsCard
+                title="Open Tickets"
+                value={data.openTickets}
+                icon={Ticket}
+                accentHex={accent}
+                context={`${data.openTicketsInProgress} currently in progress`}
+                staggerClass="stagger-1"
+              />
+            </Link>
+            <Link href="/admin/tickets?status=NEW_TICKET" className="block rounded-2xl cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2">
+              <StatsCard
+                title="Pending Assignments"
+                value={data.pendingAssignments}
+                icon={ClipboardList}
+                accentHex={accent}
+                context="Needs technician assignment"
+                status={data.pendingAssignments > 0 ? 'attention' : 'healthy'}
+                staggerClass="stagger-2"
+              />
+            </Link>
+            <Link href="/admin/technicians?available=true" className="block rounded-2xl cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2">
+              <StatsCard
+                title="Available Technicians"
+                value={data.availableTechnicians}
+                icon={UserCheck}
+                accentHex={accent}
+                context={`${data.totalTechnicians} technician${data.totalTechnicians !== 1 ? 's' : ''} total`}
+                status={data.availableTechnicians > 0 ? 'available' : 'offline'}
+                staggerClass="stagger-3"
+              />
+            </Link>
+            <Link href="/admin/tickets?completedToday=true" className="block rounded-2xl cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2">
+              <StatsCard
+                title="Completed Today"
+                value={data.completedToday}
+                icon={CheckCircle2}
+                accentHex={accent}
+                context={`${data.completedToday} job${data.completedToday !== 1 ? 's' : ''} completed today`}
+                staggerClass="stagger-4"
+              />
+            </Link>
+            <Link href="/admin/reports/revenue" className="block rounded-2xl cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2">
+              <StatsCard
+                title="Monthly Revenue"
+                value={`₹${(data.monthlyRevenue || 0).toLocaleString()}`}
+                icon={DollarSign}
+                accentHex={accent}
+                context="Verified revenue this month"
+                staggerClass="stagger-5"
+              />
+            </Link>
+            <Link href="/admin/payments?status=COLLECTED" className="block rounded-2xl cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2">
+              <StatsCard
+                title="Pending Payments"
+                value={data.pendingPayments}
+                icon={Receipt}
+                accentHex={accent}
+                context={`${data.pendingPayments} payment${data.pendingPayments !== 1 ? 's' : ''} awaiting verification`}
+                status={data.pendingPayments > 0 ? 'followup' : 'healthy'}
+                staggerClass="stagger-6"
+              />
+            </Link>
           </div>
+
+          {/* ── Needs Attention ──────────────────────────── */}
+          <NeedsAttention data={data} amc={amc} />
 
           {/* ── Quick Actions ────────────────────────────── */}
           <div className="stagger-5">

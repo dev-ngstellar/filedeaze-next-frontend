@@ -4,17 +4,19 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { getHomeRouteForRole } from '@/lib/auth-helper';
 
 export default function RootPage() {
-  const { role, isAuthenticated } = useAuth();
+  const { role, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
+    // Never decide anything from a role/auth state that's still hydrating — deciding early is
+    // exactly what let an unhydrated/unknown state fall through to a wrong default elsewhere.
+    if (isLoading) return;
     if (!isAuthenticated) { router.replace('/login'); return; }
-    if (role === 'SUPER_ADMIN') router.replace('/super-admin/dashboard');
-    else if (role === 'ADMIN') router.replace('/admin/dashboard');
-    else router.replace('/manager/dashboard');
-  }, [isAuthenticated, role, router]);
+    router.replace(getHomeRouteForRole(role) ?? '/login');
+  }, [isLoading, isAuthenticated, role, router]);
 
   return (
     <div className="flex h-screen flex-col items-center justify-center gap-6 bg-[var(--color-surface-elevated)]">

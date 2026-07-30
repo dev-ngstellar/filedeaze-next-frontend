@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Zap } from 'lucide-react';
+import { getErrorMessage } from '@/lib/utils';
 import { emailSchema, requiredString } from '@/lib/validations';
 
 const schema = z.object({
@@ -36,11 +37,10 @@ export default function SuperAdminLogin() {
     try {
       const res = await api.post('/auth/super-admin/login', data);
       const { user, tokens } = res.data.data;
-      flushSync(() => setAuth(user, tokens.accessToken, tokens.refreshToken));
+      flushSync(() => setAuth(user, tokens.accessToken, tokens.refreshToken, 'sa'));
       router.push('/super-admin/dashboard');
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Login failed';
-      toast.error(msg);
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Invalid email or password.'));
     }
   };
 

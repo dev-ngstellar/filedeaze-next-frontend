@@ -7,7 +7,6 @@ import {
   UsersIcon,
   SettingsIcon,
   UserCheckIcon,
-  ChartBarIcon,
   ClipboardIcon,
   CreditCardIcon,
   StarIcon,
@@ -24,18 +23,23 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { SidebarNavItem } from './SidebarNavItem';
 import type { NavItemDef } from './SidebarNavItem';
+import { DashboardNavGroup } from './DashboardNavGroup';
+import type { NavChildDef } from './DashboardNavGroup';
+
+const dashboardNavItem: NavItemDef = { href: '/admin/dashboard', label: 'Dashboard', icon: DashboardIcon };
+
+// Reports live under Dashboard now — same routes as before, just reorganized in the nav.
+const dashboardReportChildren: NavChildDef[] = [
+  { href: '/admin/dashboard', label: 'Overview' },
+  { href: '/admin/reports/revenue', label: 'Revenue Report' },
+  { href: '/admin/reports/tickets', label: 'Ticket Report' },
+  { href: '/admin/reports/technicians', label: 'Technician Report' },
+];
 
 const adminOnlyNav: NavItemDef[] = [
-  { href: '/admin/dashboard', label: 'Dashboard', icon: DashboardIcon },
   { href: '/admin/managers', label: 'Managers', icon: UsersIcon },
   { href: '/admin/business-settings', label: 'Business Settings', icon: SettingsIcon },
   { href: '/admin/profile', label: 'My Profile', icon: UserCheckIcon },
-];
-
-const reportsNav: NavItemDef[] = [
-  { href: '/admin/reports/revenue', label: 'Revenue', icon: ChartBarIcon },
-  { href: '/admin/reports/tickets', label: 'Tickets', icon: ClipboardIcon },
-  { href: '/admin/reports/technicians', label: 'Technicians', icon: UsersIcon },
 ];
 
 const adminMiscNav: NavItemDef[] = [
@@ -71,7 +75,14 @@ interface AdminSidebarProps {
   isCollapsed?: boolean;
 }
 
-const allNavHrefs = [...adminOnlyNav, ...reportsNav, ...adminMiscNav, ...operationsNav, ...amcNav, ...managerDashNav].map(i => i.href);
+const allNavHrefs = [
+  ...dashboardReportChildren,
+  ...adminOnlyNav,
+  ...adminMiscNav,
+  ...operationsNav,
+  ...amcNav,
+  ...managerDashNav,
+].map(i => i.href);
 
 export function AdminSidebar({ onClose, isCollapsed = false }: AdminSidebarProps) {
   const path = usePathname();
@@ -134,12 +145,15 @@ export function AdminSidebar({ onClose, isCollapsed = false }: AdminSidebarProps
         {role === 'ADMIN' && (
           <>
             {renderSectionHeader("Admin", false)}
+            <DashboardNavGroup
+              item={dashboardNavItem}
+              children={dashboardReportChildren}
+              isSectionActive={dashboardReportChildren.some(c => isActive(c.href))}
+              isChildActive={isActive}
+              isCollapsed={isCollapsed}
+              onClose={onClose}
+            />
             {adminOnlyNav.map(item => (
-              <SidebarNavItem key={item.href} item={item} isActive={isActive(item.href)} isCollapsed={isCollapsed} onClose={onClose} />
-            ))}
-
-            {renderSectionHeader("Reports", true)}
-            {reportsNav.map(item => (
               <SidebarNavItem key={item.href} item={item} isActive={isActive(item.href)} isCollapsed={isCollapsed} onClose={onClose} />
             ))}
 

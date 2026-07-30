@@ -58,31 +58,15 @@ export default function AssetDetailPage() {
       const fd = new FormData();
       files.forEach((file) => fd.append('images', file));
 
-      // TEMP DEBUG — remove after diagnosing the "At least one image file is required" report.
-      console.log('[DEBUG] input files:', files.map(f => ({ name: f.name, size: f.size, type: f.type, isFile: f instanceof File })));
-      console.log('[DEBUG] FormData entries:');
-      for (const [key, value] of fd.entries()) {
-        console.log('  ', key, '=', value, '| isFile:', value instanceof File, '| isBlob:', value instanceof Blob);
-      }
-      const url = `/web/manager/customer-assets/${id}/images`;
-      console.log('[DEBUG] request:', { url, method: 'POST', dataIsFormData: fd instanceof FormData, headers: { 'Content-Type': false } });
-
       // 'Content-Type': false (not undefined!) — axios's dispatchRequest.js unconditionally runs
       // `headers.setContentType('application/x-www-form-urlencoded', false)` for every POST/PUT/PATCH
       // request, AFTER transformRequest, and that call only skips overwriting when the header's
       // current value is NOT undefined. Setting it to `undefined` looks "unset" to that check, so it
-      // still gets stamped to x-www-form-urlencoded — confirmed via runtime logging (err.config.headers
-      // showed exactly that). `false` is axios's actual "never auto-fill this header" sentinel: it
-      // survives that later check AND is still stripped from the final serialized headers, so no
-      // Content-Type is sent at all and the browser computes the real multipart boundary itself.
-      return api.post(url, fd, { headers: { 'Content-Type': false } }).then(res => {
-        console.log('[DEBUG] response:', res.status, res.data);
-        return res;
-      }).catch(err => {
-        console.log('[DEBUG] error response:', err?.response?.status, err?.response?.data);
-        console.log('[DEBUG] error request config headers:', err?.config?.headers);
-        throw err;
-      });
+      // still gets stamped to x-www-form-urlencoded. `false` is axios's actual "never auto-fill this
+      // header" sentinel: it survives that later check AND is still stripped from the final
+      // serialized headers, so no Content-Type is sent at all and the browser computes the real
+      // multipart boundary itself.
+      return api.post(`/web/manager/customer-assets/${id}/images`, fd, { headers: { 'Content-Type': false } });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['customer-asset', id] });

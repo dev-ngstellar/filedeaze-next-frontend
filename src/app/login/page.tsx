@@ -12,6 +12,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { TenantBranding } from '@/types';
 import { toast } from 'sonner';
 import { Modal } from '@/components/ui/Modal';
+import { getErrorMessage } from '@/lib/utils';
+import { getHomeRouteForRole } from '@/lib/auth-helper';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -86,9 +88,8 @@ export default function LoginPage() {
         ...(isSuper ? {} : { tenantId: branding?.id })
       });
       setForgotSent(true);
-    } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed to send reset link';
-      toast.error(msg);
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to send reset link'));
     } finally {
       setForgotLoading(false);
     }
@@ -99,10 +100,7 @@ export default function LoginPage() {
   });
 
   const [showAlreadyIn, setShowAlreadyIn] = useState(false);
-  const dashboardPath =
-    role === 'SUPER_ADMIN' ? '/super-admin/dashboard' :
-    role === 'ADMIN' ? '/admin/dashboard' :
-    role === 'MANAGER' ? '/manager/dashboard' : null;
+  const dashboardPath = getHomeRouteForRole(role);
 
   // Show "already signed in" panel instead of silently redirecting
   useEffect(() => {
@@ -146,7 +144,10 @@ export default function LoginPage() {
       if (isSuper) {
         const res = await api.post('/auth/super-admin/login', { email, password });
         const { user, tokens } = res.data.data;
-        flushSync(() => setAuth(user, tokens.accessToken, tokens.refreshToken));
+        // Explicit 'sa' — pathname is still "/login" here (ambiguous), so it must never be
+        // inferred from the URL/hostname, only from which endpoint we actually just authenticated
+        // against.
+        flushSync(() => setAuth(user, tokens.accessToken, tokens.refreshToken, 'sa'));
         router.push('/super-admin/dashboard');
       } else {
         let tenantCode = branding?.tenantCode;
@@ -161,16 +162,16 @@ export default function LoginPage() {
         }
         const res = await api.post(`/auth/tenant/${tenantCode}/login`, { email, password });
         const { user, tokens, redirectPath } = res.data.data;
-        flushSync(() => setAuth(user, tokens.accessToken, tokens.refreshToken));
+        // Explicit 'tenant' for the same reason as above.
+        flushSync(() => setAuth(user, tokens.accessToken, tokens.refreshToken, 'tenant'));
         if (user.role === 'ADMIN' || user.role === 'MANAGER') {
-          router.push(redirectPath ?? (user.role === 'ADMIN' ? '/admin/dashboard' : '/manager/dashboard'));
+          router.push(redirectPath ?? getHomeRouteForRole(user.role) ?? '/login');
         } else {
           setLoginError('You are not authorized to access this portal.');
         }
       }
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setLoginError(msg ?? 'Invalid credentials. Please try again.');
+    } catch (err) {
+      setLoginError(getErrorMessage(err, 'Invalid email or password.'));
     }
   };
 

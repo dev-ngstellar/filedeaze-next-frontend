@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/Input';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Pagination, PaginationMeta } from '@/components/ui/Pagination';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { CheckCircle, XCircle, ExternalLink, Clock } from 'lucide-react';
 import { getErrorMessage } from '@/lib/utils';
 import dayjs from 'dayjs';
@@ -41,6 +42,7 @@ export default function PaymentRequestsPage() {
   const qc = useQueryClient();
   const [filter, setFilter] = useState<string>('PENDING_REVIEW');
   const [rejectId, setRejectId] = useState<string | null>(null);
+  const [approveTarget, setApproveTarget] = useState<PaymentRequest | null>(null);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
 
@@ -61,6 +63,7 @@ export default function PaymentRequestsPage() {
     onSuccess: () => {
       toast.success('Payment approved — subscription activated.');
       qc.invalidateQueries({ queryKey: ['payment-requests'] });
+      setApproveTarget(null);
     },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to approve payment')),
   });
@@ -183,8 +186,7 @@ export default function PaymentRequestsPage() {
                   <div className="flex flex-col gap-2 shrink-0">
                     <Button
                       size="sm"
-                      onClick={() => approveMutation.mutate(req.id)}
-                      loading={approveMutation.isPending && approveMutation.variables === req.id}
+                      onClick={() => setApproveTarget(req)}
                     >
                       <CheckCircle size={14} /> Approve
                     </Button>
@@ -229,6 +231,17 @@ export default function PaymentRequestsPage() {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!approveTarget}
+        onClose={() => setApproveTarget(null)}
+        onConfirm={() => approveTarget && approveMutation.mutate(approveTarget.id)}
+        tone="neutral"
+        title={`Approve ${approveTarget?.tenant.companyName ?? 'this'} payment?`}
+        message={`This will activate ${approveTarget?.tenant.companyName ?? 'the tenant'}'s ${approveTarget?.plan?.name ?? ''} subscription for ₹${approveTarget ? Number(approveTarget.amount).toLocaleString() : ''}.`}
+        confirmLabel="Approve"
+        loading={approveMutation.isPending}
+      />
     </div>
   );
 }

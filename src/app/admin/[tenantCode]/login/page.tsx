@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Modal } from '@/components/ui/Modal';
+import { getErrorMessage } from '@/lib/utils';
 
 // ── Schema ─────────────────────────────────────────────────────────────────
 const loginSchema = z.object({
@@ -195,9 +196,8 @@ export default function TenantLoginPage() {
         tenantCode
       });
       setForgotSent(true);
-    } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed to send reset link';
-      toast.error(msg);
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to send reset link'));
     } finally {
       setForgotLoading(false);
     }
@@ -232,15 +232,14 @@ export default function TenantLoginPage() {
     try {
       const res = await api.post(`/auth/tenant/${tenantCode}/login`, { email, password });
       const { user, tokens, redirectPath } = res.data.data;
-      flushSync(() => setAuth(user, tokens.accessToken, tokens.refreshToken));
+      flushSync(() => setAuth(user, tokens.accessToken, tokens.refreshToken, 'tenant'));
       if (user.role === 'ADMIN' || user.role === 'MANAGER') {
         router.push(redirectPath ?? (user.role === 'ADMIN' ? '/admin/dashboard' : '/manager/dashboard'));
       } else {
         setLoginError('You are not authorized to access this portal.');
       }
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { message?: string } } };
-      setLoginError(axiosErr.response?.data?.message ?? 'Invalid email or password.');
+    } catch (err) {
+      setLoginError(getErrorMessage(err, 'Invalid email or password.'));
     }
   };
 

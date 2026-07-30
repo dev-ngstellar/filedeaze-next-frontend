@@ -2,6 +2,7 @@
 'use client';
 
 import { useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
@@ -14,20 +15,42 @@ import { Select } from '@/components/ui/Select';
 import { PaymentStatusBadge } from '@/components/ui/Badge';
 import { FilterCard } from '@/components/ui/FilterCard';
 import { ErrorState } from '@/components/ui/ErrorState';
-import { CheckCircle, DollarSign } from 'lucide-react';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { CheckCircle, DollarSign, X } from 'lucide-react';
 import { getErrorMessage } from '@/lib/utils';
 import dayjs from 'dayjs';
 
 export default function PaymentsPage() {
   const qc = useQueryClient();
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const today = dayjs().format('YYYY-MM-DD');
   const monthStart = dayjs().startOf('month').format('YYYY-MM-DD');
-  const [status, setStatus] = useState('');
-  const [from, setFrom] = useState(monthStart);
-  const [to, setTo] = useState(today);
-  const [params, setParams] = useState({ status: '', from: monthStart, to: today });
+  // Arriving from the Admin Dashboard's "Pending Payments" card/Needs-Attention item: the
+  // dashboard's COLLECTED count has no date restriction, so the destination list must not apply
+  // the page's usual "this month" default either, or the two numbers would disagree.
+  const arrivedFromDashboard = searchParams.get('status') === 'COLLECTED';
+  const [status, setStatus] = useState(arrivedFromDashboard ? 'COLLECTED' : '');
+  const [from, setFrom] = useState(arrivedFromDashboard ? '' : monthStart);
+  const [to, setTo] = useState(arrivedFromDashboard ? '' : today);
+  const [params, setParams] = useState(
+    arrivedFromDashboard ? { status: 'COLLECTED', from: '', to: '' } : { status: '', from: monthStart, to: today },
+  );
+  const [dashboardFilterActive, setDashboardFilterActive] = useState(arrivedFromDashboard);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
+  const [verifyTarget, setVerifyTarget] = useState<Payment | null>(null);
+
+  const clearDashboardFilter = () => {
+    setDashboardFilterActive(false);
+    setStatus('');
+    setFrom(monthStart);
+    setTo(today);
+    setParams({ status: '', from: monthStart, to: today });
+    setPage(1);
+    router.replace(pathname);
+  };
 
   const { data: response, isLoading, isError, error, refetch, isFetching } = useQuery<{ items: Payment[]; meta: PaginationMeta; totalVerified: number }>({
     queryKey: ['payments', params, page, limit],
@@ -41,7 +64,7 @@ export default function PaymentsPage() {
 
   const verifyMutation = useMutation({
     mutationFn: (id: string) => api.patch(`/web/manager/payments/${id}/verify`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['payments'] }); toast.success('Payment verified'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['payments'] }); toast.success('Payment verified'); setVerifyTarget(null); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to verify payment')),
   });
 
@@ -113,8 +136,7 @@ export default function PaymentsPage() {
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => verifyMutation.mutate(row.original.id)}
-            loading={verifyMutation.isPending}
+            onClick={() => setVerifyTarget(row.original)}
           >
             <CheckCircle size={13} />
             Verify
@@ -151,6 +173,23 @@ export default function PaymentsPage() {
         </div>
       </div>
 
+      {dashboardFilterActive && (
+        <div className="mb-4 flex items-center gap-2 text-sm">
+          <span className="text-[var(--color-text-muted)]">Active filter:</span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-primary-light)] border border-[var(--color-primary-ring)] pl-3 pr-1.5 py-1 text-xs font-medium text-[var(--color-primary)]">
+            Awaiting Verification
+            <button
+              type="button"
+              onClick={clearDashboardFilter}
+              aria-label="Clear Awaiting Verification filter"
+              className="flex items-center justify-center rounded-full h-4 w-4 hover:bg-[var(--color-primary)]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] transition-colors"
+            >
+              <X size={11} />
+            </button>
+          </span>
+        </div>
+      )}
+
       {/* Filter bar */}
       <FilterCard
         title="Payments Filter"
@@ -158,8 +197,8 @@ export default function PaymentsPage() {
         to={to}
         onFromChange={setFrom}
         onToChange={setTo}
-        onApply={() => { setPage(1); setParams({ status, from, to }); }}
-        onReset={() => { setStatus(''); setFrom(monthStart); setTo(today); setPage(1); setParams({ status: '', from: monthStart, to: today }); }}
+        onApply={() => { setDashboardFilterActive(false); setPage(1); setParams({ status, from, to }); }}
+        onReset={clearDashboardFilter}
         isLoading={isLoading}
       >
         <div className="space-y-1">
@@ -227,6 +266,17 @@ export default function PaymentsPage() {
           />
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!verifyTarget}
+        onClose={() => setVerifyTarget(null)}
+        onConfirm={() => verifyTarget && verifyMutation.mutate(verifyTarget.id)}
+        tone="neutral"
+        title={`Verify payment for ${verifyTarget?.ticket?.ticketNumber ?? 'this ticket'}?`}
+        message={`This confirms the ₹${verifyTarget ? Number(verifyTarget.invoice?.total ?? verifyTarget.amount).toLocaleString() : ''} payment has been received and reconciled. This cannot be undone.`}
+        confirmLabel="Verify"
+        loading={verifyMutation.isPending}
+      />
     </div>
   );
 }

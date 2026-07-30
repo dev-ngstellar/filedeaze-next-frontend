@@ -1,12 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { ColumnDef } from '@tanstack/react-table';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
-import { Eye, Phone, Plus } from 'lucide-react';
+import { Eye, Phone, Plus, X } from 'lucide-react';
 import Link from 'next/link';
 import api from '@/lib/axios';
 import { Ticket, TicketStatus, Customer, ServiceCategory, ServiceSubCategory, CustomerAsset, AmcSubscription } from '@/types';
@@ -48,17 +48,43 @@ type NewCustomerForm = {
   address: string;
 };
 
+// Each of these mirrors a drill-down link from the Admin Dashboard — the query param name and the
+// resulting API filter match the exact same rule used to compute that dashboard number, so the
+// count shown on the dashboard always agrees with the filtered list here.
+type DashboardFilterKind = 'pending-assignment' | 'overdue' | 'completed-today' | 'awaiting-collection' | 'open' | 'expired';
+
+const DASHBOARD_FILTER_LABELS: Record<DashboardFilterKind, string> = {
+  'pending-assignment': 'Awaiting Assignment',
+  'overdue': 'Overdue',
+  'completed-today': 'Completed Today',
+  'awaiting-collection': 'Awaiting Payment Collection',
+  'open': 'Open Tickets',
+  'expired': 'Rework Requests (Expired Assignment)',
+};
+
+function readDashboardFilter(sp: URLSearchParams): { kind: DashboardFilterKind; params: Record<string, string>; status: string } | null {
+  if (sp.get('overdue') === 'true') return { kind: 'overdue', params: { overdueOnly: 'true' }, status: '' };
+  if (sp.get('completedToday') === 'true') return { kind: 'completed-today', params: { completedTodayOnly: 'true' }, status: '' };
+  if (sp.get('awaitingCollection') === 'true') return { kind: 'awaiting-collection', params: { awaitingCollectionOnly: 'true' }, status: '' };
+  if (sp.get('open') === 'true') return { kind: 'open', params: { openOnly: 'true' }, status: '' };
+  if (sp.get('expired') === 'true') return { kind: 'expired', params: { expiredOnly: 'true' }, status: '' };
+  if (sp.get('status') === 'NEW_TICKET') return { kind: 'pending-assignment', params: { status: 'NEW_TICKET' }, status: 'NEW_TICKET' };
+  return null;
+}
+
 export default function TicketsPage() {
   const qc = useQueryClient();
-  const [status, setStatus] = useState('');
+  const pathname = usePathname();
+  const prefix = pathname.startsWith('/admin/') ? 'admin' : 'manager';
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialDashboardFilter = readDashboardFilter(searchParams);
+  const [status, setStatus] = useState(initialDashboardFilter?.status ?? '');
   const [customerName, setCustomerName] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const pathname = usePathname();
-  const prefix = pathname.startsWith('/admin/') ? 'admin' : 'manager';
-  const searchParams = useSearchParams();
-  const initialExpiredOnly = searchParams.get('expired') === 'true';
-  const [params, setParams] = useState<Record<string, string>>(initialExpiredOnly ? { expiredOnly: 'true' } : {});
+  const [dashboardFilter, setDashboardFilter] = useState<DashboardFilterKind | null>(initialDashboardFilter?.kind ?? null);
+  const [params, setParams] = useState<Record<string, string>>(initialDashboardFilter?.params ?? {});
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [showCreate, setShowCreate] = useState(false);
@@ -168,6 +194,17 @@ export default function TicketsPage() {
 
   const closeModal = () => { setShowCreate(false); setShowNewCustomer(false); setNewCust({ name: '', phone: '', email: '', address: '' }); reset(); };
 
+  const clearDashboardFilter = () => {
+    setDashboardFilter(null);
+    setStatus('');
+    setCustomerName('');
+    setFrom('');
+    setTo('');
+    setParams({});
+    setPage(1);
+    router.replace(pathname);
+  };
+
   const columns: ColumnDef<Ticket, unknown>[] = [
     { accessorKey: 'ticketNumber', header: 'Ticket #' },
     { accessorKey: 'customer.name', header: 'Customer', cell: ({ row }) => row.original.customer?.name },
@@ -187,14 +224,31 @@ export default function TicketsPage() {
         </Button>
       </div>
 
+      {dashboardFilter && (
+        <div className="mb-4 flex items-center gap-2 text-sm">
+          <span className="text-[var(--color-text-muted)]">Active filter:</span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-primary-light)] border border-[var(--color-primary-ring)] pl-3 pr-1.5 py-1 text-xs font-medium text-[var(--color-primary)]">
+            {DASHBOARD_FILTER_LABELS[dashboardFilter]}
+            <button
+              type="button"
+              onClick={clearDashboardFilter}
+              aria-label={`Clear ${DASHBOARD_FILTER_LABELS[dashboardFilter]} filter`}
+              className="flex items-center justify-center rounded-full h-4 w-4 hover:bg-[var(--color-primary)]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] transition-colors"
+            >
+              <X size={11} />
+            </button>
+          </span>
+        </div>
+      )}
+
       <FilterCard
         title="Tickets Filter"
         from={from}
         to={to}
         onFromChange={val => setFrom(val)}
         onToChange={val => setTo(val)}
-        onApply={() => { setPage(1); setParams({ status, customerName, from, to }); }}
-        onReset={() => { setStatus(''); setCustomerName(''); setFrom(''); setTo(''); setParams({}); setPage(1); }}
+        onApply={() => { setDashboardFilter(null); setPage(1); setParams({ status, customerName, from, to }); }}
+        onReset={clearDashboardFilter}
       >
         <div className="space-y-1">
           <label className="text-xs font-medium text-[var(--color-text-secondary)]">Status</label>

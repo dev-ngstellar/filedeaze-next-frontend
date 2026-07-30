@@ -15,7 +15,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
-import { Eye, Plus, Box, ShieldCheck, ShieldOff, Send } from 'lucide-react';
+import { Eye, Plus, Box, ShieldCheck, ShieldOff, Send, Pencil } from 'lucide-react';
 import { getErrorMessage } from '@/lib/utils';
 import dayjs from 'dayjs';
 
@@ -25,6 +25,7 @@ export default function CustomerHistoryPage() {
   const prefix = pathname.startsWith('/admin/') ? 'admin' : 'manager';
   const qc = useQueryClient();
   const [showAddEmail, setShowAddEmail] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
 
   const { data: detail, isLoading, isError, error, refetch } = useQuery<Customer & { tickets: Ticket[] }>({
     queryKey: ['customer-history', id],
@@ -49,6 +50,34 @@ export default function CustomerHistoryPage() {
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to send portal invitation')),
   });
 
+  interface EditCustomerForm { name: string; phone: string; email?: string; address?: string }
+  const {
+    register: registerEdit, handleSubmit: handleEditSubmit, reset: resetEdit,
+    formState: { errors: editErrors, isSubmitting: isEditSubmitting },
+  } = useForm<EditCustomerForm>();
+
+  const openEdit = () => {
+    if (!detail) return;
+    resetEdit({ name: detail.name, phone: detail.phone, email: detail.email ?? '', address: detail.address ?? '' });
+    setShowEdit(true);
+  };
+
+  const updateMutation = useMutation({
+    mutationFn: (d: EditCustomerForm) => api.patch(`/web/manager/customers/${id}`, {
+      name: d.name,
+      phone: d.phone,
+      email: d.email || undefined,
+      address: d.address || undefined,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['customer-history', id] });
+      qc.invalidateQueries({ queryKey: ['customers'] });
+      toast.success('Customer updated');
+      setShowEdit(false); resetEdit();
+    },
+    onError: (err) => toast.error(getErrorMessage(err, 'Failed to update customer')),
+  });
+
   const columns: ColumnDef<Ticket, unknown>[] = [
     { accessorKey: 'ticketNumber', header: 'Ticket #' },
     { accessorKey: 'status', header: 'Status', cell: ({ row }) => <TicketStatusBadge status={row.original.status} /> },
@@ -65,7 +94,10 @@ export default function CustomerHistoryPage() {
         <div className="bg-[var(--color-surface)] rounded-xl p-4 border border-[var(--color-border)] shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">{detail.name}</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">{detail.name}</h2>
+                <Button variant="ghost" size="sm" onClick={openEdit} aria-label="Edit customer"><Pencil size={14} /></Button>
+              </div>
               <p className="text-sm text-[var(--color-text-muted)]">{detail.phone}{detail.email ? ` · ${detail.email}` : ''}</p>
             </div>
             <div className="flex flex-col items-end gap-2">
@@ -135,6 +167,19 @@ export default function CustomerHistoryPage() {
           <div className="flex justify-end gap-3">
             <Button variant="secondary" type="button" onClick={() => { setShowAddEmail(false); reset(); }}>Cancel</Button>
             <Button type="submit" loading={isSubmitting || invitationMutation.isPending}>Send Invitation</Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={showEdit} onClose={() => { setShowEdit(false); resetEdit(); }} title="Edit Customer" size="sm">
+        <form onSubmit={handleEditSubmit(d => updateMutation.mutate(d))} className="space-y-4">
+          <Input label="Name" error={editErrors.name?.message} {...registerEdit('name', { required: 'Name is required' })} />
+          <Input label="Phone" error={editErrors.phone?.message} {...registerEdit('phone', { required: 'Phone is required' })} />
+          <Input label="Email (optional)" type="email" error={editErrors.email?.message} {...registerEdit('email')} />
+          <Input label="Address (optional)" error={editErrors.address?.message} {...registerEdit('address')} />
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" type="button" onClick={() => { setShowEdit(false); resetEdit(); }}>Cancel</Button>
+            <Button type="submit" loading={isEditSubmitting || updateMutation.isPending}>Save Changes</Button>
           </div>
         </form>
       </Modal>

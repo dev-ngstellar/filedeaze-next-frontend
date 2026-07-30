@@ -74,9 +74,9 @@ export default function ManagerDashboardPage() {
             value={data.assignedTickets}
             icon={ClipboardCheck}
             accentHex={accent}
-            context="5 assigned today"
+            context="Currently assigned to technicians"
             status="ontrack"
-            footerText="Updated 2 mins ago"
+            footerText="Live"
           />
           <StatsCard
             title="In Progress"
@@ -92,7 +92,7 @@ export default function ManagerDashboardPage() {
             value={data.pendingTickets}
             icon={AlertCircle}
             accentHex={accent}
-            context="2 overdue tasks"
+            context="Waiting on technician action"
             status="attention"
             footerText="Live"
           />
@@ -101,16 +101,16 @@ export default function ManagerDashboardPage() {
             value={data.completedTickets}
             icon={CheckCircle}
             accentHex={accent}
-            context="12 completed successfully"
+            context="Completed to date"
             status="completed"
-            footerText="Updated now"
+            footerText="Live"
           />
           <StatsCard
             title="Active Technicians"
             value={data.totalTechnicians}
             icon={Users}
             accentHex={accent}
-            context="10 currently on duty"
+            context="Registered technicians"
             status="online"
             footerText="Live"
           />
@@ -119,9 +119,9 @@ export default function ManagerDashboardPage() {
             value={`₹${data.pendingPayments.toLocaleString()}`}
             icon={DollarSign}
             accentHex={accent}
-            context="₹2,500 collected this morning"
+            context="Payments awaiting collection"
             status="growing"
-            footerText="Updated now"
+            footerText="Live"
           />
         </div>
 
@@ -143,9 +143,9 @@ export default function ManagerDashboardPage() {
                 value={data.assignedTickets}
                 icon={ClipboardCheck}
                 accentHex={accent}
-                context="5 assigned today"
+                context="Currently assigned to technicians"
                 status="ontrack"
-                footerText="Updated 2 mins ago"
+                footerText="Live"
               />
               <Link href="/manager/tickets?expired=true" className="block">
                 <StatsCard
@@ -153,9 +153,9 @@ export default function ManagerDashboardPage() {
                   value={data.expiredAssignments}
                   icon={AlertTriangle}
                   accentHex={accent}
-                  context="1 raised today"
+                  context="Requires manager review"
                   status="review"
-                  footerText="Updated today"
+                  footerText="Live"
                 />
               </Link>
               <StatsCard
@@ -163,9 +163,9 @@ export default function ManagerDashboardPage() {
                 value={data.completedToday}
                 icon={CalendarCheck}
                 accentHex={accent}
-                context="12 completed successfully"
+                context="Visits completed today"
                 status="completed"
-                footerText="Updated now"
+                footerText="Live"
               />
             </div>
           </div>

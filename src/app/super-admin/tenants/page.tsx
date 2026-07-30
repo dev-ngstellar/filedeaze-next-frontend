@@ -68,9 +68,10 @@ export default function TenantsPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [showCreate, setShowCreate] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Tenant | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [confirmToggle, setConfirmToggle] = useState<{ tenant: Tenant; next: TenantStatus } | null>(null);
 
   const { data: tenants = [], isLoading, isError, error, refetch } = useQuery<Tenant[]>({
     queryKey: ['tenants', params],
@@ -130,16 +131,18 @@ export default function TenantsPage() {
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: TenantStatus }) =>
       api.patch(`/web/super-admin/tenants/${id}/status`, { status }),
-    onSuccess: () => {
+    onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['tenants'] });
+      toast.success(vars.status === 'ACTIVE' ? 'Tenant activated' : 'Tenant suspended');
       setTogglingId(null);
+      setConfirmToggle(null);
     },
     onError: (err) => { toast.error(getErrorMessage(err, 'Failed to update status')); setTogglingId(null); },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/web/super-admin/tenants/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['tenants'] }); toast.success('Tenant deleted'); setDeleteId(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['tenants'] }); toast.success('Tenant deleted'); setDeleteTarget(null); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to delete tenant')),
   });
 
@@ -204,7 +207,13 @@ export default function TenantsPage() {
     {
       id: 'active',
       header: 'Active',
-      cell: ({ row }) => <ActiveToggle tenant={row.original} onToggle={handleToggle} loading={togglingId === row.original.id} />
+      cell: ({ row }) => (
+        <ActiveToggle
+          tenant={row.original}
+          onToggle={(_id, next) => setConfirmToggle({ tenant: row.original, next })}
+          loading={togglingId === row.original.id}
+        />
+      )
     },
     {
       id: 'actions',
@@ -218,7 +227,7 @@ export default function TenantsPage() {
           </Link>
           <button
             className="h-8 w-8 rounded-lg border border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-muted)] hover:border-red-300 hover:text-red-500 transition-colors"
-            onClick={() => setDeleteId(row.original.id)}
+            onClick={() => setDeleteTarget(row.original)}
             title="Delete tenant"
           >
             <Trash2 size={14} />
@@ -359,11 +368,28 @@ export default function TenantsPage() {
       )}
 
       <ConfirmDialog
-        open={!!deleteId}
-        onClose={() => setDeleteId(null)}
-        onConfirm={() => deleteId && deleteMutation.mutate(deleteId)}
-        message="This will soft-delete the tenant and deactivate all users. This action cannot be easily undone."
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        title={`Delete ${deleteTarget?.companyName ?? 'this tenant'}?`}
+        message={`This will soft-delete ${deleteTarget?.companyName ?? 'the tenant'} and deactivate all its users. This action cannot be easily undone.`}
+        confirmLabel="Delete"
         loading={deleteMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={!!confirmToggle}
+        onClose={() => setConfirmToggle(null)}
+        onConfirm={() => confirmToggle && handleToggle(confirmToggle.tenant.id, confirmToggle.next)}
+        tone={confirmToggle?.next === 'ACTIVE' ? 'neutral' : 'danger'}
+        title={confirmToggle?.next === 'ACTIVE' ? `Activate ${confirmToggle.tenant.companyName}?` : `Suspend ${confirmToggle?.tenant.companyName ?? 'this tenant'}?`}
+        message={
+          confirmToggle?.next === 'ACTIVE'
+            ? `${confirmToggle.tenant.companyName} will regain access to their workspace.`
+            : `${confirmToggle?.tenant.companyName ?? 'This tenant'} and all its users will immediately lose access to their workspace.`
+        }
+        confirmLabel={confirmToggle?.next === 'ACTIVE' ? 'Activate' : 'Suspend'}
+        loading={statusMutation.isPending}
       />
     </div>
   );

@@ -43,58 +43,43 @@ export default function TicketsReportPage() {
     queryFn: async () => {
       const res = await api.get('/web/admin/reports/tickets', { params });
       const d = res.data.data;
-      return { byStatus: d?.byStatus ?? {} };
+      return {
+        byStatus: d?.byStatus ?? {},
+        avgResolutionMinutes: d?.avgResolutionMinutes ?? null,
+        trend: d?.trend ?? [],
+        recentTickets: d?.recentTickets ?? [],
+      };
     },
     staleTime: 30_000,
     retry: 1,
   });
 
   const byStatus = data?.byStatus ?? {};
-  
+
   // Calculate KPIs
   const totalTickets = Object.values(byStatus).reduce((a, b) => a + (b ?? 0), 0) || 0;
-  
+
   const openCount = OPEN_STATUSES.reduce((sum, status) => sum + (byStatus[status as TicketStatus] || 0), 0);
   const inProgressCount = IN_PROGRESS_STATUSES.reduce((sum, status) => sum + (byStatus[status as TicketStatus] || 0), 0);
   const completedCount = COMPLETED_STATUSES.reduce((sum, status) => sum + (byStatus[status as TicketStatus] || 0), 0);
 
-  const avgResolutionTime = totalTickets > 0 ? '2h 15m' : '0h 0m'; // Mocked as requested
+  // Real average resolution time (createdAt -> closedAt), computed server-side from tickets that
+  // actually closed in the selected range — null when none did, rather than a fabricated fallback.
+  const avgResolutionTime = data?.avgResolutionMinutes != null
+    ? `${Math.floor(data.avgResolutionMinutes / 60)}h ${data.avgResolutionMinutes % 60}m`
+    : null;
 
-  // MOCK: Ticket Trend Over Time (Stacked Bar Chart)
-  const trendData = useMemo(() => {
-    if (totalTickets === 0) return [];
-    const days = 7;
-    const result = [];
-    let remaining = totalTickets;
-    
-    for (let i = days - 1; i >= 0; i--) {
-      const date = dayjs().subtract(i, 'day').format('MMM DD');
-      if (i === 0) {
-        result.push({ date, Open: Math.floor(remaining * 0.3), InProgress: Math.floor(remaining * 0.2), Completed: Math.ceil(remaining * 0.5) });
-      } else {
-        const alloc = Math.max(1, Math.floor(totalTickets / days));
-        remaining -= alloc;
-        result.push({ date, Open: Math.floor(alloc * 0.3), InProgress: Math.floor(alloc * 0.2), Completed: Math.ceil(alloc * 0.5) });
-      }
-    }
-    return result;
-  }, [totalTickets]);
+  const trendData = data?.trend ?? [];
 
-  // MOCK: Detailed Data Table — show only 5 most recent
-  const mockTableData = useMemo(() => {
-    if (totalTickets === 0) return [];
-    return Array.from({ length: Math.min(totalTickets, 5) }).map((_, i) => ({
-      id: `TKT-2026-000${i+1}`,
-      customer: ['Acme Corp', 'Stark Ind', 'Wayne Ent', 'Globex'][i % 4],
-      technician: ['Aravind', 'Benthal', 'Cathrel'][i % 3],
-      priority: ['High', 'Medium', 'Low'][i % 3],
-      status: Object.keys(byStatus)[i % Object.keys(byStatus).length]?.replace(/_/g, ' ') || 'COMPLETED',
-      createdDate: dayjs().subtract(i, 'day').format('DD MMM YYYY'),
-      closedDate: i % 2 === 0 ? dayjs().subtract(i-1, 'day').format('DD MMM YYYY') : '-'
-    }));
-  }, [totalTickets, byStatus]);
+  const tableData = useMemo(() => (data?.recentTickets ?? []).map(t => ({
+    ...t,
+    priority: t.priority.charAt(0) + t.priority.slice(1).toLowerCase(),
+    status: t.status.replace(/_/g, ' '),
+    createdDate: dayjs(t.createdDate).format('DD MMM YYYY'),
+    closedDate: t.closedDate ? dayjs(t.closedDate).format('DD MMM YYYY') : '-',
+  })), [data?.recentTickets]);
 
-  // Generate Insights
+  // Generate Insights — every line traces to a real, server-computed number.
   const insights = useMemo(() => {
     if (totalTickets === 0) return ['No ticket data recorded for this period.'];
     const i = [];
@@ -102,7 +87,9 @@ export default function TicketsReportPage() {
     if (completedCount > 0) {
       i.push(`Completion rate stands at ${Math.round((completedCount / totalTickets) * 100)}%.`);
     }
-    i.push(`Average resolution time is ${avgResolutionTime}.`);
+    if (avgResolutionTime) {
+      i.push(`Average resolution time is ${avgResolutionTime}.`);
+    }
     return i;
   }, [totalTickets, completedCount, avgResolutionTime]);
 
@@ -193,7 +180,7 @@ export default function TicketsReportPage() {
         />
         <StatsCard
           title="Avg Resolution"
-          value={avgResolutionTime}
+          value={avgResolutionTime ?? 'Not available'}
           icon={Clock}
           iconColor="text-violet-600"
           iconBg="bg-violet-100 dark:bg-violet-500/20"
@@ -291,7 +278,7 @@ export default function TicketsReportPage() {
               <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">Recent Tickets</h3>
               <span className="text-[11px] font-medium text-[var(--color-text-muted)]">Showing 5 most recent records</span>
             </div>
-            <DataTable data={mockTableData} columns={columns} isLoading={false} />
+            <DataTable data={tableData} columns={columns} isLoading={false} />
           </div>
         </>
       )}

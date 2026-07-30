@@ -11,7 +11,6 @@ import {
     WalletIcon,
     HandCoinsIcon,
     ClipboardIcon,
-    ChartBarIcon,
     ZapIcon,
     BoxIcon,
     ShieldCheckIcon,
@@ -21,9 +20,16 @@ import {
 import { cn } from '@/lib/utils';
 import { SidebarNavItem } from './SidebarNavItem';
 import type { NavItemDef } from './SidebarNavItem';
+import { DashboardNavGroup } from './DashboardNavGroup';
+import type { NavChildDef } from './DashboardNavGroup';
 
-const overviewNav: NavItemDef[] = [
-    { href: '/manager/dashboard', label: 'Dashboard', icon: DashboardIcon },
+const dashboardNavItem: NavItemDef = { href: '/manager/dashboard', label: 'Dashboard', icon: DashboardIcon };
+
+// The Technician Report lives under Dashboard now — same route as before, just reorganized in
+// the nav (matches the Admin sidebar's Dashboard → Reports pattern).
+const dashboardReportChildren: NavChildDef[] = [
+    { href: '/manager/dashboard', label: 'Overview' },
+    { href: '/manager/reports/technicians', label: 'Technician Report' },
 ];
 
 const operationsNav: NavItemDef[] = [
@@ -46,10 +52,6 @@ const catalogNav: NavItemDef[] = [
     { href: '/manager/service-catalog', label: 'Categories and Sub-Categories', icon: SparklesIcon },
 ];
 
-const reportsNav: NavItemDef[] = [
-    { href: '/manager/reports/technicians', label: 'Technicians', icon: ChartBarIcon },
-];
-
 const financeNav: NavItemDef[] = [
     { href: '/manager/payments', label: 'Payments', icon: HandCoinsIcon },
     { href: '/manager/invoices', label: 'Invoices', icon: CreditCardIcon },
@@ -60,7 +62,7 @@ interface ManagerSidebarProps {
     isCollapsed?: boolean;
 }
 
-const allNavHrefs = [...overviewNav, ...operationsNav, ...amcNav, ...catalogNav, ...reportsNav, ...financeNav].map(i => i.href);
+const allNavHrefs = [...dashboardReportChildren, ...operationsNav, ...amcNav, ...catalogNav, ...financeNav].map(i => i.href);
 
 export function ManagerSidebar({ onClose, isCollapsed = false }: ManagerSidebarProps) {
     const path = usePathname();
@@ -120,9 +122,14 @@ export function ManagerSidebar({ onClose, isCollapsed = false }: ManagerSidebarP
             {/* Navigation */}
             <nav className="flex-1 flex flex-col overflow-y-auto sidebar-scroll py-3 px-3 space-y-0.5">
                 {renderSectionHeader("Overview", false)}
-                {overviewNav.map(item => (
-                    <SidebarNavItem key={item.href} item={item} isActive={isActive(item.href)} isCollapsed={isCollapsed} onClose={onClose} />
-                ))}
+                <DashboardNavGroup
+                    item={dashboardNavItem}
+                    children={dashboardReportChildren}
+                    isSectionActive={dashboardReportChildren.some(c => isActive(c.href))}
+                    isChildActive={isActive}
+                    isCollapsed={isCollapsed}
+                    onClose={onClose}
+                />
 
                 {renderSectionHeader("Operations", true)}
                 {operationsNav.map(item => (
@@ -136,11 +143,6 @@ export function ManagerSidebar({ onClose, isCollapsed = false }: ManagerSidebarP
 
                 {renderSectionHeader("Service Catalog", true)}
                 {catalogNav.map(item => (
-                    <SidebarNavItem key={item.href} item={item} isActive={isActive(item.href)} isCollapsed={isCollapsed} onClose={onClose} />
-                ))}
-
-                {renderSectionHeader("Reports", true)}
-                {reportsNav.map(item => (
                     <SidebarNavItem key={item.href} item={item} isActive={isActive(item.href)} isCollapsed={isCollapsed} onClose={onClose} />
                 ))}
 

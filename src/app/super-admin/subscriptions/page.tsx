@@ -19,6 +19,7 @@ import {
   Search, RefreshCw, Eye, ArrowUpDown, Ban, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { FilterCard } from '@/components/ui/FilterCard';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { DataTable } from '@/components/ui/DataTable';
 import { ColumnDef } from '@tanstack/react-table';
 import dayjs from 'dayjs';
@@ -548,6 +549,7 @@ export default function SubscriptionsPage() {
   const [showUpgradeDowngrade, setShowUpgradeDowngrade] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [activeSub, setActiveSub] = useState<SubscriptionWithMeta | null>(null);
+  const [confirmSubAction, setConfirmSubAction] = useState<{ sub: SubscriptionWithMeta; action: 'suspend' | 'resume' | 'cancel' } | null>(null);
   const [renewTenantId, setRenewTenantId] = useState<string | undefined>();
 
   const { data: dashboard, isLoading: dashLoading } = useQuery<SubscriptionDashboard>({
@@ -569,17 +571,17 @@ export default function SubscriptionsPage() {
 
   const cancelMutation = useMutation({
     mutationFn: (id: string) => api.patch(`/web/super-admin/subscriptions/${id}/cancel`),
-    onSuccess: () => { toast.success('Subscription cancelled'); qc.invalidateQueries({ queryKey: ['subscriptions'] }); qc.invalidateQueries({ queryKey: ['subscription-dashboard'] }); qc.invalidateQueries({ queryKey: ['tenants'] }); },
+    onSuccess: () => { toast.success('Subscription cancelled'); qc.invalidateQueries({ queryKey: ['subscriptions'] }); qc.invalidateQueries({ queryKey: ['subscription-dashboard'] }); qc.invalidateQueries({ queryKey: ['tenants'] }); setConfirmSubAction(null); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to cancel subscription')),
   });
   const suspendMutation = useMutation({
     mutationFn: (id: string) => api.patch(`/web/super-admin/subscriptions/${id}/suspend`),
-    onSuccess: () => { toast.success('Subscription suspended'); qc.invalidateQueries({ queryKey: ['subscriptions'] }); qc.invalidateQueries({ queryKey: ['tenants'] }); },
+    onSuccess: () => { toast.success('Subscription suspended'); qc.invalidateQueries({ queryKey: ['subscriptions'] }); qc.invalidateQueries({ queryKey: ['tenants'] }); setConfirmSubAction(null); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to suspend subscription')),
   });
   const resumeMutation = useMutation({
     mutationFn: (id: string) => api.patch(`/web/super-admin/subscriptions/${id}/resume`),
-    onSuccess: (res) => { toast.success(res.data.message ?? 'Subscription resumed'); qc.invalidateQueries({ queryKey: ['subscriptions'] }); qc.invalidateQueries({ queryKey: ['tenants'] }); },
+    onSuccess: (res) => { toast.success(res.data.message ?? 'Subscription resumed'); qc.invalidateQueries({ queryKey: ['subscriptions'] }); qc.invalidateQueries({ queryKey: ['tenants'] }); setConfirmSubAction(null); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to resume subscription')),
   });
 
@@ -671,13 +673,13 @@ export default function SubscriptionsPage() {
             {['ACTIVE', 'TRIAL'].includes(sub.status) && <>
               <Btn title="Renew" onClick={() => openRenew(sub)}><RefreshCw size={13} /></Btn>
               <Btn title="Upgrade / Downgrade" onClick={() => { setActiveSub(sub); setShowUpgradeDowngrade(true); }}><ArrowUpDown size={13} /></Btn>
-              <Btn title="Suspend Subscription" onClick={() => suspendMutation.mutate(sub.id)} loading={suspendMutation.isPending} danger><Ban size={13} /></Btn>
+              <Btn title="Suspend Subscription" onClick={() => setConfirmSubAction({ sub, action: 'suspend' })} danger><Ban size={13} /></Btn>
             </>}
             {sub.status === 'SUSPENDED' && (
-              <Btn title="Resume Subscription" onClick={() => resumeMutation.mutate(sub.id)} loading={resumeMutation.isPending}><CheckCircle size={13} /></Btn>
+              <Btn title="Resume Subscription" onClick={() => setConfirmSubAction({ sub, action: 'resume' })}><CheckCircle size={13} /></Btn>
             )}
             {sub.status !== 'CANCELLED' && (
-              <Btn title="Cancel Subscription" onClick={() => { if (window.confirm('Cancel this subscription? The tenant will lose access.')) cancelMutation.mutate(sub.id); }} loading={cancelMutation.isPending} danger>
+              <Btn title="Cancel Subscription" onClick={() => setConfirmSubAction({ sub, action: 'cancel' })} danger>
                 <XCircle size={13} />
               </Btn>
             )}
@@ -847,6 +849,31 @@ export default function SubscriptionsPage() {
       {showRenew && <RenewModal onClose={() => { setShowRenew(false); setRenewTenantId(undefined); }} tenants={tenants} plans={plans} defaultTenantId={renewTenantId} />}
       {showUpgradeDowngrade && activeSub && <UpgradeDowngradeModal sub={activeSub} plans={plans} onClose={() => { setShowUpgradeDowngrade(false); setActiveSub(null); }} />}
       {showDetail && activeSub && <DetailModal sub={activeSub} onClose={() => { setShowDetail(false); setActiveSub(null); }} />}
+
+      <ConfirmDialog
+        open={!!confirmSubAction}
+        onClose={() => setConfirmSubAction(null)}
+        onConfirm={() => {
+          if (!confirmSubAction) return;
+          const { sub, action } = confirmSubAction;
+          if (action === 'suspend') suspendMutation.mutate(sub.id);
+          else if (action === 'resume') resumeMutation.mutate(sub.id);
+          else cancelMutation.mutate(sub.id);
+        }}
+        tone={confirmSubAction?.action === 'resume' ? 'neutral' : 'danger'}
+        title={
+          confirmSubAction?.action === 'suspend' ? `Suspend ${confirmSubAction.sub.tenant.companyName}'s subscription?` :
+          confirmSubAction?.action === 'resume' ? `Resume ${confirmSubAction.sub.tenant.companyName}'s subscription?` :
+          `Cancel ${confirmSubAction?.sub.tenant.companyName ?? 'this'} subscription?`
+        }
+        message={
+          confirmSubAction?.action === 'suspend' ? `${confirmSubAction.sub.tenant.companyName} will immediately lose access to their ${confirmSubAction.sub.plan.name} plan until resumed.` :
+          confirmSubAction?.action === 'resume' ? `${confirmSubAction.sub.tenant.companyName} will regain access to their ${confirmSubAction.sub.plan.name} plan.` :
+          `${confirmSubAction?.sub.tenant.companyName ?? 'The tenant'} will lose access to their ${confirmSubAction?.sub.plan.name ?? ''} plan. This cannot be undone.`
+        }
+        confirmLabel={confirmSubAction?.action === 'suspend' ? 'Suspend' : confirmSubAction?.action === 'resume' ? 'Resume' : 'Cancel Subscription'}
+        loading={suspendMutation.isPending || resumeMutation.isPending || cancelMutation.isPending}
+      />
     </div>
   );
 }

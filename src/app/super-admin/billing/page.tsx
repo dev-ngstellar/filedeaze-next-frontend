@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { CheckCircle, QrCode, TrendingUp, Clock, Pencil } from 'lucide-react';
 import { FilterCard } from '@/components/ui/FilterCard';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { getErrorMessage } from '@/lib/utils';
 import dayjs from 'dayjs';
 
@@ -26,6 +27,7 @@ export default function BillingPage() {
   const [params, setParams] = useState({ tenantId: '', status: '', from: '', to: '' });
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
+  const [markPaidTarget, setMarkPaidTarget] = useState<Billing | null>(null);
 
   const { data, isLoading, isError, error, refetch } = useQuery<BillingReport>({
     queryKey: ['billing', params, page, limit],
@@ -48,7 +50,7 @@ export default function BillingPage() {
 
   const markPaidMutation = useMutation({
     mutationFn: (id: string) => api.patch(`/web/super-admin/billing/${id}/mark-paid`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['billing'] }); toast.success('Marked as paid'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['billing'] }); toast.success('Marked as paid'); setMarkPaidTarget(null); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to mark as paid')),
   });
 
@@ -118,8 +120,7 @@ export default function BillingPage() {
         <Button
           size="sm"
           variant="secondary"
-          onClick={() => markPaidMutation.mutate(row.original.id)}
-          loading={markPaidMutation.isPending}
+          onClick={() => setMarkPaidTarget(row.original)}
         >
           <CheckCircle size={12} /> Mark Paid
         </Button>
@@ -268,6 +269,17 @@ export default function BillingPage() {
           onPageChange: setPage,
           onLimitChange: (l) => { setPage(1); setLimit(l); },
         } : undefined}
+      />
+
+      <ConfirmDialog
+        open={!!markPaidTarget}
+        onClose={() => setMarkPaidTarget(null)}
+        onConfirm={() => markPaidTarget && markPaidMutation.mutate(markPaidTarget.id)}
+        tone="neutral"
+        title={`Mark ${markPaidTarget?.tenant?.companyName ?? 'this'} invoice as paid?`}
+        message={`This confirms ₹${markPaidTarget ? Number(markPaidTarget.amount).toLocaleString() : ''} has been received from ${markPaidTarget?.tenant?.companyName ?? 'the tenant'} outside the platform. This cannot be undone.`}
+        confirmLabel="Mark Paid"
+        loading={markPaidMutation.isPending}
       />
     </div>
   );

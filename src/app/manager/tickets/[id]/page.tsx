@@ -11,6 +11,7 @@ import { Select } from '@/components/ui/Select';
 import { TicketStatusBadge, PaymentStatusBadge, Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
 import { PageSpinner } from '@/components/ui/Spinner';
@@ -180,6 +181,7 @@ function PaymentCollectionCard({ ticketId, subCategoryId, isAmcCovered, onCollec
   const [dialog, setDialog] = useState<{ section: 'warranty' | 'nonWarranty'; editIndex?: number } | null>(null);
   const [dialogPartId, setDialogPartId] = useState('');
   const [dialogQty, setDialogQty] = useState('1');
+  const [pendingPayload, setPendingPayload] = useState<Record<string, unknown> | null>(null);
 
   const { data: catalog = [] } = useQuery<SparePart[]>({
     queryKey: ['sub-category-spare-parts', subCategoryId],
@@ -189,7 +191,7 @@ function PaymentCollectionCard({ ticketId, subCategoryId, isAmcCovered, onCollec
 
   const collectMutation = useMutation({
     mutationFn: (payload: unknown) => api.post(`/web/manager/tickets/${ticketId}/collect-payment`, payload),
-    onSuccess: () => { toast.success('Payment collected and invoice generated'); onCollected(); },
+    onSuccess: () => { toast.success('Payment collected and invoice generated'); setPendingPayload(null); onCollected(); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to collect payment')),
   });
 
@@ -265,7 +267,7 @@ function PaymentCollectionCard({ ticketId, subCategoryId, isAmcCovered, onCollec
       return;
     }
 
-    collectMutation.mutate({
+    setPendingPayload({
       serviceCharge: parsedService || 0,
       labourCharge: parsedLabour || 0,
       additionalCharge: parsedAdditional || 0,
@@ -381,6 +383,17 @@ function PaymentCollectionCard({ ticketId, subCategoryId, isAmcCovered, onCollec
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!pendingPayload}
+        onClose={() => setPendingPayload(null)}
+        onConfirm={() => pendingPayload && collectMutation.mutate(pendingPayload)}
+        tone="neutral"
+        title={`Collect ₹${grandTotal.toLocaleString()} via ${method.replace('_', ' ')}?`}
+        message="This will record the payment and generate the customer invoice. This cannot be undone from here."
+        confirmLabel="Collect Payment"
+        loading={collectMutation.isPending}
+      />
     </div>
   );
 }
@@ -395,6 +408,7 @@ export default function TicketDetailPage() {
   const [showClose, setShowClose] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
   const [assignMode, setAssignMode] = useState<'assign' | 'reassign' | 'reschedule'>('assign');
+  const [confirmPending, setConfirmPending] = useState<'approve' | 'reject' | null>(null);
 
   const { data: ticket, isLoading, isError, error, refetch, isFetching } = useQuery<Ticket>({ queryKey: ['ticket', id], queryFn: async () => (await api.get(`/web/manager/tickets/${id}`)).data.data });
   const { data: techs = [] } = useQuery<Technician[]>({ queryKey: ['technicians'], queryFn: async () => (await api.get('/web/manager/technicians')).data.data });
@@ -469,13 +483,13 @@ export default function TicketDetailPage() {
 
   const approvePendingMutation = useMutation({
     mutationFn: () => api.patch(`/web/manager/tickets/${id}/approve-pending`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ticket', id] }); toast.success('Pending approved — technician notified'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ticket', id] }); toast.success('Pending approved — technician notified'); setConfirmPending(null); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to approve pending ticket')),
   });
 
   const rejectPendingMutation = useMutation({
     mutationFn: () => api.patch(`/web/manager/tickets/${id}/reject-pending`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ticket', id] }); toast.success('Pending rejected — ticket resumed'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ticket', id] }); toast.success('Pending rejected — ticket resumed'); setConfirmPending(null); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to reject pending ticket')),
   });
 
@@ -522,8 +536,8 @@ export default function TicketDetailPage() {
             {canReschedule && <Button size="sm" variant="secondary" onClick={() => { setAssignMode('reschedule'); resetA({ scheduledAt: defaultScheduleValue(ticket.scheduledAt) }); setShowAssign(true); }}><CalendarClock size={13} /> Reschedule</Button>}
             {canActOnPending && (
               <>
-                <Button size="sm" variant="secondary" className="text-emerald-600 border-emerald-200 hover:bg-emerald-50" loading={approvePendingMutation.isPending} onClick={() => approvePendingMutation.mutate()}><ThumbsUp size={13} /> Approve</Button>
-                <Button size="sm" variant="secondary" className="text-red-600 border-red-200 hover:bg-red-50" loading={rejectPendingMutation.isPending} onClick={() => rejectPendingMutation.mutate()}><ThumbsDown size={13} /> Reject</Button>
+                <Button size="sm" variant="secondary" className="text-emerald-600 border-emerald-200 hover:bg-emerald-50" onClick={() => setConfirmPending('approve')}><ThumbsUp size={13} /> Approve</Button>
+                <Button size="sm" variant="secondary" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setConfirmPending('reject')}><ThumbsDown size={13} /> Reject</Button>
               </>
             )}
             {canClose && <Button size="sm" variant="secondary" onClick={() => setShowClose(true)}><CheckCircle size={13} /> Close</Button>}
@@ -879,6 +893,21 @@ export default function TicketDetailPage() {
           <div className="flex justify-end gap-3"><Button variant="secondary" type="button" onClick={() => { setShowCancel(false); resetX(); }}>Cancel</Button><Button variant="danger" type="submit" loading={sx}>Cancel Ticket</Button></div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={!!confirmPending}
+        onClose={() => setConfirmPending(null)}
+        onConfirm={() => confirmPending === 'approve' ? approvePendingMutation.mutate() : rejectPendingMutation.mutate()}
+        tone={confirmPending === 'approve' ? 'neutral' : 'danger'}
+        title={confirmPending === 'approve' ? `Approve pending on ${ticket.ticketNumber}?` : `Reject pending on ${ticket.ticketNumber}?`}
+        message={
+          confirmPending === 'approve'
+            ? `${ticket.technician?.name ?? 'The technician'} will be notified that the delay is acknowledged. The ticket stays in Pending until they resume work.`
+            : `${ticket.technician?.name ?? 'The technician'} will be sent back to work on this ticket immediately, without the reported delay being acknowledged.`
+        }
+        confirmLabel={confirmPending === 'approve' ? 'Approve' : 'Reject'}
+        loading={approvePendingMutation.isPending || rejectPendingMutation.isPending}
+      />
     </div>
   );
 }

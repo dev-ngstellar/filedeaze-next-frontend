@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { ColumnDef } from '@tanstack/react-table';
-import { Eye, Plus, ShieldCheck, ShieldOff } from 'lucide-react';
+import { Eye, Pencil, Plus, ShieldCheck, ShieldOff } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import api from '@/lib/axios';
@@ -19,6 +19,7 @@ import { getErrorMessage } from '@/lib/utils';
 import dayjs from 'dayjs';
 
 interface CreateCustomerForm { name: string; phone: string; email?: string; address?: string }
+interface EditCustomerForm { name: string; phone: string; email?: string; address?: string }
 
 export default function CustomersPage() {
   const pathname = usePathname();
@@ -29,6 +30,7 @@ export default function CustomersPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<Customer | null>(null);
 
   const { data, isLoading, isError, error, refetch } = useQuery<{ items: Customer[]; meta: PaginationMeta }>({
     queryKey: ['customers', query, page, limit],
@@ -42,6 +44,11 @@ export default function CustomersPage() {
   const { register, handleSubmit, reset, watch, formState: { isSubmitting } } = useForm<CreateCustomerForm>();
   const emailValue = watch('email');
 
+  const {
+    register: registerEdit, handleSubmit: handleEditSubmit, reset: resetEdit,
+    formState: { errors: editErrors, isSubmitting: isEditSubmitting },
+  } = useForm<EditCustomerForm>();
+
   const createMutation = useMutation({
     mutationFn: (d: CreateCustomerForm) => api.post('/web/manager/customers', d),
     onSuccess: () => {
@@ -50,6 +57,28 @@ export default function CustomersPage() {
       setShowCreate(false); reset();
     },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to create customer')),
+  });
+
+  const openEdit = (customer: Customer) => {
+    setEditing(customer);
+    resetEdit({ name: customer.name, phone: customer.phone, email: customer.email ?? '', address: customer.address ?? '' });
+  };
+  const closeEdit = () => { setEditing(null); resetEdit(); };
+
+  const updateMutation = useMutation({
+    mutationFn: (d: EditCustomerForm) => api.patch(`/web/manager/customers/${editing!.id}`, {
+      name: d.name,
+      phone: d.phone,
+      email: d.email || undefined,
+      address: d.address || undefined,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['customers'] });
+      qc.invalidateQueries({ queryKey: ['customer-history', editing!.id] });
+      toast.success('Customer updated');
+      closeEdit();
+    },
+    onError: (err) => toast.error(getErrorMessage(err, 'Failed to update customer')),
   });
 
   const columns: ColumnDef<Customer, unknown>[] = [
@@ -65,7 +94,12 @@ export default function CustomersPage() {
     { accessorKey: 'createdAt', header: 'Since', cell: ({ row }) => dayjs(row.original.createdAt).format('DD MMM YYYY') },
     {
       id: 'actions', header: '',
-      cell: ({ row }) => <Link href={`/${prefix}/customers/${row.original.id}`}><Button variant="ghost" size="sm"><Eye size={14} /></Button></Link>,
+      cell: ({ row }) => (
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={() => openEdit(row.original)} aria-label="Edit customer"><Pencil size={14} /></Button>
+          <Link href={`/${prefix}/customers/${row.original.id}`}><Button variant="ghost" size="sm" aria-label="View customer"><Eye size={14} /></Button></Link>
+        </div>
+      ),
     },
   ];
 
@@ -113,6 +147,19 @@ export default function CustomersPage() {
           <div className="flex justify-end gap-3">
             <Button variant="secondary" type="button" onClick={() => { setShowCreate(false); reset(); }}>Cancel</Button>
             <Button type="submit" loading={isSubmitting || createMutation.isPending}>Create Customer</Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={!!editing} onClose={closeEdit} title="Edit Customer" size="sm">
+        <form onSubmit={handleEditSubmit(d => updateMutation.mutate(d))} className="space-y-4">
+          <Input label="Name" error={editErrors.name?.message} {...registerEdit('name', { required: 'Name is required' })} />
+          <Input label="Phone" error={editErrors.phone?.message} {...registerEdit('phone', { required: 'Phone is required' })} />
+          <Input label="Email (optional)" type="email" error={editErrors.email?.message} {...registerEdit('email')} />
+          <Input label="Address (optional)" error={editErrors.address?.message} {...registerEdit('address')} />
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" type="button" onClick={closeEdit}>Cancel</Button>
+            <Button type="submit" loading={isEditSubmitting || updateMutation.isPending}>Save Changes</Button>
           </div>
         </form>
       </Modal>

@@ -625,6 +625,8 @@ export interface SuperAdminDashboard {
   suspendedTenants: number;
   totalRevenue: number;
   activeUsers: number;
+  revenueTrend?: { month: string; revenue: number }[];
+  tenantGrowth?: { month: string; tenants: number }[];
 }
 
 export interface PlanUsageEntry {
@@ -644,19 +646,16 @@ export interface PlanUsage {
 }
 
 export interface AdminDashboard {
-  totalTickets: number;
-  newTicketsToday: number;
   openTickets: number;
-  unassignedTickets: number;
+  openTicketsInProgress: number;
+  pendingAssignments: number;
+  overdueTickets: number;
   totalTechnicians: number;
   availableTechnicians: number;
-  totalCustomers: number;
-  newCustomersThisWeek: number;
+  completedToday: number;
   monthlyRevenue: number;
-  revenueTrendPercent: number;
-  revenueToday: number;
-  pendingPaymentsAmount: number;
-  pendingPaymentsCount: number;
+  pendingPayments: number;
+  paymentsAwaitingCollection: number;
   planUsage: PlanUsage | null;
   subscription: {
     tenantStatus: TenantStatus | null;
@@ -737,6 +736,17 @@ export interface RevenueReport {
 
 export interface TicketReport {
   byStatus: Partial<Record<TicketStatus, number>>;
+  avgResolutionMinutes?: number | null;
+  trend?: { date: string; Open: number; InProgress: number; Completed: number }[];
+  recentTickets?: {
+    id: string;
+    customer: string;
+    technician: string;
+    priority: string;
+    status: string;
+    createdDate: string;
+    closedDate: string | null;
+  }[];
 }
 
 export interface TechnicianReportRow {

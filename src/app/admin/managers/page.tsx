@@ -33,7 +33,7 @@ type Form = z.infer<typeof schema>;
 export default function ManagersPage() {
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Manager | null>(null);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
 
@@ -55,7 +55,7 @@ export default function ManagersPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/web/admin/managers/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['managers'] }); toast.success('Manager deleted'); setDeleteId(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['managers'] }); toast.success('Manager removed'); setDeleteTarget(null); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to delete manager')),
   });
 
@@ -70,7 +70,7 @@ export default function ManagersPage() {
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
           <Link href={`/admin/managers/${row.original.id}`}><Button variant="ghost" size="sm"><Eye size={14} /></Button></Link>
-          <Button variant="ghost" size="sm" onClick={() => setDeleteId(row.original.id)} className="text-red-500"><Trash2 size={14} /></Button>
+          <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(row.original)} className="text-red-500"><Trash2 size={14} /></Button>
         </div>
       ),
     },
@@ -109,7 +109,15 @@ export default function ManagersPage() {
         </form>
       </Modal>
 
-      <ConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} message="This will remove the manager." loading={deleteMutation.isPending} />
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        title={`Remove ${deleteTarget?.name ?? 'this manager'}?`}
+        message={`${deleteTarget?.name ?? 'This manager'} will lose access to the manager portal.`}
+        confirmLabel="Remove"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }
