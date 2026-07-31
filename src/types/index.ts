@@ -359,7 +359,9 @@ export interface CustomerAsset {
   model?: string;
   serialNumber?: string;
   purchaseDate?: string;
+  installationDate?: string;
   installationAddress?: string;
+  warrantyExpiresAt?: string;
   notes?: string;
   isActive: boolean;
   ticketCount?: number;
@@ -437,6 +439,7 @@ export interface AmcStatusSummary {
   endDate: string;
   totalVisits: number;
   remainingVisits: number;
+  nextVisitDate: string | null;
 }
 
 // ─── Spare Parts ──────────────────────────────────────────────────────────────
@@ -454,7 +457,7 @@ export interface SparePart {
   updatedAt: string;
 }
 
-export type SparePartCoverageType = 'WARRANTY' | 'OUT_OF_WARRANTY';
+export type SparePartCoverageType = 'WARRANTY' | 'OUT_OF_WARRANTY' | 'AMC';
 
 export interface TicketSparePartUsage {
   id: string;
@@ -516,6 +519,7 @@ export interface Ticket {
   customerAsset?: CustomerAsset;
   amcStatus?: AmcStatusSummary | null;
   isAmcCovered?: boolean;
+  amcVisit?: { id: string; status: 'SCHEDULED' | 'COMPLETED' | 'MISSED' | 'CANCELLED' } | null;
   spareParts?: TicketSparePartUsage[];
   scheduledAt?: string;
   /** Immutable snapshot of what the customer originally asked for — set once at creation, never
