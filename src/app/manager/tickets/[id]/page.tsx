@@ -328,6 +328,71 @@ function PaymentCollectionCard({ ticketId, spareParts, isAmcCovered, onCollected
   );
 }
 
+function getAmcDisplayStatus(ticket: Ticket) {
+  if (ticket.amcVisit) {
+    if (ticket.amcVisit.status === 'COMPLETED') {
+      return {
+        label: 'AMC Covered',
+        badgeVariant: 'success' as const,
+        description: 'This service visit has consumed one AMC visit under the active contract.',
+      };
+    }
+    return {
+      label: 'AMC Covered (Scheduled)',
+      badgeVariant: 'purple' as const,
+      description: 'This is a scheduled AMC maintenance visit.',
+    };
+  }
+
+  if (ticket.isAmcCovered) {
+    return {
+      label: 'AMC Covered',
+      badgeVariant: 'success' as const,
+      description: 'This service visit is covered by the AMC contract.',
+    };
+  }
+
+  if (!ticket.amcStatus) {
+    return {
+      label: 'No Active AMC',
+      badgeVariant: 'default' as const,
+      description: 'No active AMC contract was found for this asset.',
+    };
+  }
+
+  const isExpired = ticket.amcStatus.endDate && dayjs(ticket.amcStatus.endDate).isBefore(dayjs());
+  if (isExpired) {
+    return {
+      label: 'Expired',
+      badgeVariant: 'danger' as const,
+      description: `The AMC contract (${ticket.amcStatus.planName}) expired on ${dayjs(ticket.amcStatus.endDate).format('DD MMM YYYY')}.`,
+    };
+  }
+
+  if (ticket.amcStatus.remainingVisits <= 0) {
+    return {
+      label: 'Zero Visits',
+      badgeVariant: 'warning' as const,
+      description: `The AMC contract (${ticket.amcStatus.planName}) has 0 remaining visits.`,
+    };
+  }
+
+  const isPendingDiagnosis = !ticket.spareParts?.length && !ticket.payment;
+  if (isPendingDiagnosis) {
+    return {
+      label: 'AMC Eligible (Pending Diagnosis)',
+      badgeVariant: 'purple' as const,
+      description: `Asset is AMC Eligible (${ticket.amcStatus.planName} active, ${ticket.amcStatus.remainingVisits} visits left). Coverage will apply once diagnosis is recorded.`,
+    };
+  }
+
+  return {
+    label: 'AMC Active & Eligible',
+    badgeVariant: 'purple' as const,
+    description: `AMC plan "${ticket.amcStatus.planName}" is active with ${ticket.amcStatus.remainingVisits} visits remaining.`,
+  };
+}
+
 export default function TicketDetailPage() {
   const { id } = useParams<{ id: string }>();
   const pathname = usePathname();
@@ -347,11 +412,10 @@ export default function TicketDetailPage() {
   const { data: ticket, isLoading, isError, error, refetch, isFetching } = useQuery<Ticket>({ queryKey: ['ticket', id], queryFn: async () => (await api.get(`/web/manager/tickets/${id}`)).data.data });
   const { data: techs = [] } = useQuery<Technician[]>({ queryKey: ['technicians'], queryFn: async () => (await api.get('/web/manager/technicians')).data.data });
 
-  const { data: allTickets = [] } = useQuery<Ticket[]>({
-    queryKey: ['tickets-availability'],
-    queryFn: async () => (await api.get('/web/manager/tickets')).data.data,
+  const { data: availableTechs = [] } = useQuery<Array<Technician & { activeTicketCount: number; isAvailable: boolean }>>({
+    queryKey: ['technicians-availability'],
+    queryFn: async () => (await api.get('/web/manager/technicians/available')).data.data,
     enabled: showAssign,
-    staleTime: 60_000,
   });
 
   // Which technicians match this ticket's service — surfaced in the picker so the manager
@@ -374,17 +438,32 @@ export default function TicketDetailPage() {
   }, [recommended]);
   const requiredSkillCount = recommended?.requiredSkills.length ?? 0;
 
-  const busyTechIds = useMemo(() => new Set(
-    allTickets
-      .filter(t => BUSY_STATUSES.includes(t.status) && t.technician?.id)
-      .map(t => t.technician!.id)
-  ), [allTickets]);
+  const busyTechIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of availableTechs) {
+      const adjustedCount = (ticket?.technician?.id && t.id === ticket.technician.id)
+        ? t.activeTicketCount - 1
+        : t.activeTicketCount;
+      if (adjustedCount > 0) {
+        set.add(t.id);
+      }
+    }
+    return set;
+  }, [availableTechs, ticket?.technician?.id]);
 
   const { register: ra, handleSubmit: ha, reset: resetA, setValue: setAssignValue, watch: watchAssign, formState: { isSubmitting: sa, errors: errorsA } } = useForm<{ technicianId: string; scheduledAt: string }>();
   const selectedTechId = watchAssign('technicianId') ?? '';
   const selectedSchedule = watchAssign('scheduledAt') ?? '';
   const { register: rc, handleSubmit: hc, reset: resetC, formState: { isSubmitting: sc } } = useForm<{ notes: string }>();
   const { register: rx, handleSubmit: hx, reset: resetX, formState: { isSubmitting: sx } } = useForm<{ reason: string }>();
+
+  const onInvalidAssign = (errors: any) => {
+    if (errors.technicianId) {
+      toast.error('Please select a technician first');
+    } else if (errors.scheduledAt) {
+      toast.error(errors.scheduledAt.message ?? 'Please select a valid scheduled date & time');
+    }
+  };
 
   const assignMutation = useMutation({
     // The datetime-local input's raw value has no timezone marker — converting to a full UTC ISO
@@ -397,6 +476,9 @@ export default function TicketDetailPage() {
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['ticket', id] });
+      qc.invalidateQueries({ queryKey: ['tickets'] });
+      qc.invalidateQueries({ queryKey: ['technicians'] });
+      qc.invalidateQueries({ queryKey: ['technicians-availability'] });
       toast.success(assignMode === 'reassign' ? 'Reassigned' : assignMode === 'reschedule' ? 'Rescheduled' : 'Assigned');
       setShowAssign(false); resetA();
     },
@@ -405,25 +487,25 @@ export default function TicketDetailPage() {
 
   const closeMutation = useMutation({
     mutationFn: (d: { notes: string }) => api.patch(`/web/manager/tickets/${id}/close`, d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ticket', id] }); toast.success('Ticket closed'); setShowClose(false); resetC(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ticket', id] }); qc.invalidateQueries({ queryKey: ['tickets'] }); toast.success('Ticket closed'); setShowClose(false); resetC(); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to close ticket')),
   });
 
   const cancelMutation = useMutation({
     mutationFn: (d: { reason: string }) => api.patch(`/web/manager/tickets/${id}/cancel`, d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ticket', id] }); toast.success('Ticket cancelled'); setShowCancel(false); resetX(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ticket', id] }); qc.invalidateQueries({ queryKey: ['tickets'] }); toast.success('Ticket cancelled'); setShowCancel(false); resetX(); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to cancel ticket')),
   });
 
   const approvePendingMutation = useMutation({
     mutationFn: () => api.patch(`/web/manager/tickets/${id}/approve-pending`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ticket', id] }); toast.success('Pending approved — technician notified'); setConfirmPending(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ticket', id] }); qc.invalidateQueries({ queryKey: ['tickets'] }); toast.success('Pending approved — technician notified'); setConfirmPending(null); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to approve pending ticket')),
   });
 
   const rejectPendingMutation = useMutation({
     mutationFn: () => api.patch(`/web/manager/tickets/${id}/reject-pending`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ticket', id] }); toast.success('Pending rejected — ticket resumed'); setConfirmPending(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ticket', id] }); qc.invalidateQueries({ queryKey: ['tickets'] }); toast.success('Pending rejected — ticket resumed'); setConfirmPending(null); },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to reject pending ticket')),
   });
 
@@ -441,6 +523,10 @@ export default function TicketDetailPage() {
     mutationFn: (assetId: string) => api.patch(`/web/manager/tickets/${id}/associate-asset`, { customerAssetId: assetId }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['ticket', id] });
+      qc.invalidateQueries({ queryKey: ['tickets'] });
+      if (customerId) {
+        qc.invalidateQueries({ queryKey: ['customer-assets', customerId] });
+      }
       toast.success('Asset linked to this ticket');
       setShowAssetPicker(false); setPickedAssetId(''); setConfirmAssetChange(null);
     },
@@ -449,7 +535,15 @@ export default function TicketDetailPage() {
 
   const consumeAmcVisitMutation = useMutation({
     mutationFn: () => api.patch(`/web/manager/tickets/${id}/consume-amc-visit`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ticket', id] }); toast.success('This service now counts as one AMC visit'); setConfirmConsumeVisit(false); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ticket', id] });
+      qc.invalidateQueries({ queryKey: ['tickets'] });
+      if (customerId) {
+        qc.invalidateQueries({ queryKey: ['customer-assets', customerId] });
+      }
+      toast.success('This service now counts as one AMC visit');
+      setConfirmConsumeVisit(false);
+    },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to record AMC visit')),
   });
 
@@ -545,53 +639,22 @@ export default function TicketDetailPage() {
             {ticket.customerAsset && ticket.status !== 'CANCELLED' && ticket.status !== 'TICKET_CLOSED' && (
               <button
                 type="button"
-                onClick={() => { setPickedAssetId(''); setShowAssetPicker(v => !v); }}
+                onClick={() => { setPickedAssetId(''); setShowAssetPicker(true); }}
                 className="text-xs text-[var(--color-primary)] hover:underline"
               >
-                Change
+                Change Asset
               </button>
             )}
           </div>
 
-          {!ticket.customerAsset && !showAssetPicker && ticket.status !== 'CANCELLED' && ticket.status !== 'TICKET_CLOSED' && (
+          {!ticket.customerAsset && ticket.status !== 'CANCELLED' && ticket.status !== 'TICKET_CLOSED' && (
             <div className="pt-1">
               <p className="text-xs text-[var(--color-text-muted)] mb-2">No asset linked yet — identify which of {ticket.customer?.name ?? 'the customer'}&apos;s assets this request is about.</p>
-              <Button size="sm" variant="secondary" onClick={() => setShowAssetPicker(true)}><Link2 size={13} /> Link Asset</Button>
+              <Button size="sm" variant="secondary" onClick={() => { setPickedAssetId(''); setShowAssetPicker(true); }}><Link2 size={13} /> Link Asset</Button>
             </div>
           )}
 
-          {showAssetPicker && (
-            <div className="pt-1 space-y-2">
-              <Select
-                label="Select Asset"
-                value={pickedAssetId}
-                onChange={e => setPickedAssetId(e.target.value)}
-                placeholder={customerAssets.length ? 'Choose an asset' : 'No assets registered for this customer'}
-                options={customerAssets.map(a => ({ value: a.id, label: `${a.name}${a.brand ? ` (${a.brand}${a.model ? ' ' + a.model : ''})` : ''}` }))}
-              />
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  disabled={!pickedAssetId}
-                  onClick={() => {
-                    const asset = customerAssets.find(a => a.id === pickedAssetId);
-                    if (!asset) return;
-                    // Changing an already-linked asset (as opposed to linking one for the first
-                    // time) can affect which AMC/warranty coverage applies, so confirm that case —
-                    // linking one for the first time on a still-open ticket doesn't need it.
-                    if (ticket.customerAsset) setConfirmAssetChange(asset);
-                    else associateAssetMutation.mutate(asset.id);
-                  }}
-                  loading={associateAssetMutation.isPending}
-                >
-                  Link
-                </Button>
-                <Button size="sm" variant="secondary" onClick={() => { setShowAssetPicker(false); setPickedAssetId(''); }}>Cancel</Button>
-              </div>
-            </div>
-          )}
-
-          {ticket.customerAsset && !showAssetPicker && (
+          {ticket.customerAsset && (
             <>
               <div className="text-[var(--color-text-secondary)] space-y-1">
                 <p><span className="text-[var(--color-text-muted)]">Name:</span> {ticket.customerAsset.name}</p>
@@ -610,26 +673,34 @@ export default function TicketDetailPage() {
                 </div>
               )}
 
-              {ticket.amcStatus ? (
-                <div className="pt-1 space-y-1">
-                  <div className="flex items-center gap-1.5 text-purple-600 font-medium text-xs"><ShieldCheck size={13} /> AMC — {ticket.amcStatus.planName}</div>
-                  <p className="text-xs text-[var(--color-text-muted)]">{ticket.amcStatus.remainingVisits} of {ticket.amcStatus.totalVisits} visits remaining</p>
-                  {ticket.amcStatus.nextVisitDate && (
-                    <p className="text-xs text-[var(--color-text-muted)]">Next scheduled visit: {dayjs(ticket.amcStatus.nextVisitDate).format('DD MMM YYYY')}</p>
-                  )}
-                  {!ticket.amcVisit && ticket.amcStatus.remainingVisits > 0 && !['NEW_TICKET', 'ASSIGNED', 'ACCEPTED', 'CANCELLED'].includes(ticket.status) && (
-                    <Button size="sm" variant="secondary" className="mt-1" onClick={() => setConfirmConsumeVisit(true)}>
-                      <ShieldCheck size={13} /> Mark as AMC Visit
-                    </Button>
-                  )}
-                  {ticket.amcVisit && (
-                    <Badge variant={ticket.amcVisit.status === 'COMPLETED' ? 'success' : 'purple'} showDot={false}>
-                      AMC Visit {ticket.amcVisit.status === 'COMPLETED' ? 'Consumed' : ticket.amcVisit.status}
-                    </Badge>
-                  )}
-                </div>
-              ) : (
-                <div className="pt-1 flex items-center justify-between">
+              {(() => {
+                const amcDisp = getAmcDisplayStatus(ticket);
+                return (
+                  <div className="pt-2 border-t border-[var(--color-border)] mt-2 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wide">AMC Status</span>
+                      <Badge variant={amcDisp.badgeVariant} showDot={false}>{amcDisp.label}</Badge>
+                    </div>
+                    <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">{amcDisp.description}</p>
+                    
+                    {ticket.customerAsset && 
+                     ticket.amcStatus && 
+                     ticket.amcStatus.status === 'ACTIVE' && 
+                     !(ticket.amcStatus.endDate && dayjs(ticket.amcStatus.endDate).isBefore(dayjs())) && 
+                     ticket.amcStatus.remainingVisits > 0 && 
+                     !ticket.amcVisit && 
+                     !ticket.isAmcCovered &&
+                     !['NEW_TICKET', 'ASSIGNED', 'ACCEPTED', 'CANCELLED'].includes(ticket.status) && (
+                      <Button size="sm" variant="secondary" className="mt-1" onClick={() => setConfirmConsumeVisit(true)}>
+                        <ShieldCheck size={13} /> Mark as AMC Visit
+                      </Button>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {!ticket.amcStatus && (
+                <div className="pt-2 border-t border-[var(--color-border)] mt-2 flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-[var(--color-text-muted)] text-xs"><ShieldOff size={13} /> No active AMC</div>
                   <Link href={`/${prefix}/amc/assign?customerId=${ticket.customer?.id}&assetId=${ticket.customerAsset.id}`} className="text-xs text-[var(--color-primary)] hover:underline">
                     Assign AMC →
@@ -656,10 +727,38 @@ export default function TicketDetailPage() {
           <h3 className="font-medium text-[var(--color-text-secondary)]">Payment</h3>
 
           {/* Coverage is only truly known once the technician has recorded work/parts — showing
-              "AMC Covered" before that just because the asset has active AMC would be finalizing
-              coverage too early (the technician might diagnose something the plan doesn't cover). */}
+               "AMC Covered" before that just because the asset has active AMC would be finalizing
+               coverage too early (the technician might diagnose something the plan doesn't cover). */}
           {!ticket.spareParts?.length && !ticket.payment && (
-            <Badge variant="default" showDot={false}>Coverage: Pending Diagnosis</Badge>
+            <div className="space-y-2 pt-1 text-[var(--color-text-secondary)]">
+              <Badge variant="default" showDot={false}>Coverage: Pending Diagnosis</Badge>
+              {ticket.amcStatus && !(ticket.amcStatus.endDate && dayjs(ticket.amcStatus.endDate).isBefore(dayjs())) && ticket.amcStatus.remainingVisits > 0 && (
+                <div className="text-xs text-purple-600 font-medium flex items-center gap-1 mt-1">
+                  <ShieldCheck size={13} /> Asset is AMC Eligible
+                </div>
+              )}
+              <div className="rounded-lg bg-[var(--color-surface-elevated)] p-2.5 mt-2 space-y-1">
+                <p className="font-semibold text-xs text-[var(--color-text-muted)] uppercase tracking-wide">Estimated Service Charges</p>
+                <div className="flex justify-between">
+                  <span className="text-[var(--color-text-muted)]">Inspection Charge:</span>
+                  <span>₹{ticket.subCategory?.serviceCharges?.inspectionCharge?.toLocaleString() ?? '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--color-text-muted)]">Standard Service Charge:</span>
+                  <span>₹{ticket.subCategory?.serviceCharges?.serviceCharge?.toLocaleString() ?? '—'}</span>
+                </div>
+                {ticket.amcStatus && !(ticket.amcStatus.endDate && dayjs(ticket.amcStatus.endDate).isBefore(dayjs())) && ticket.amcStatus.remainingVisits > 0 && (
+                  <p className="text-[10px] text-purple-600 italic pt-1 border-t border-[var(--color-border)] mt-1">
+                    Charges are NOT waived yet. Once marked as an AMC Visit, charges will be waived to ₹0 at completion.
+                  </p>
+                )}
+                {!ticket.amcStatus && (
+                  <p className="text-[10px] text-[var(--color-text-muted)] italic pt-1 border-t border-[var(--color-border)] mt-1">
+                    Charges will be finalized upon technician diagnosis and work completion.
+                  </p>
+                )}
+              </div>
+            </div>
           )}
 
           {ticket.payment ? (
@@ -674,9 +773,11 @@ export default function TicketDetailPage() {
                 <>
                   <p className={ticket.payment.serviceChargeWaived ? 'line-through text-[var(--color-text-muted)]' : ''}>
                     <span className="text-[var(--color-text-muted)]">Service Charge:</span> ₹{(ticket.payment.serviceCharge ?? 0).toLocaleString()}
+                    {ticket.payment.serviceChargeWaived && <span className="text-xs text-purple-600 ml-1.5">(AMC Covered)</span>}
                   </p>
                   <p className={ticket.payment.labourChargeWaived ? 'line-through text-[var(--color-text-muted)]' : ''}>
                     <span className="text-[var(--color-text-muted)]">Labour Charge:</span> ₹{(ticket.payment.labourCharge ?? 0).toLocaleString()}
+                    {ticket.payment.labourChargeWaived && <span className="text-xs text-purple-600 ml-1.5">(AMC Covered)</span>}
                   </p>
                   <p className={ticket.payment.sparePartsWaived ? 'line-through text-[var(--color-text-muted)]' : ''}>
                     <span className="text-[var(--color-text-muted)]">Spare Parts:</span> ₹{(ticket.payment.sparePartsAmount ?? 0).toLocaleString()}
@@ -710,7 +811,7 @@ export default function TicketDetailPage() {
             </div>
           ) : ticket.status === 'COMPLETED' ? (
             <p className="text-[var(--color-text-muted)]">Not yet collected — see Payment Details below.</p>
-          ) : <p className="text-[var(--color-text-muted)]">No payment yet</p>}
+          ) : !ticket.spareParts?.length ? null : <p className="text-[var(--color-text-muted)]">No payment yet</p>}
 
           {ticket.feedback && (
             <>
@@ -731,7 +832,13 @@ export default function TicketDetailPage() {
           ticketId={ticket.id}
           spareParts={ticket.spareParts ?? []}
           isAmcCovered={!!ticket.isAmcCovered}
-          onCollected={() => qc.invalidateQueries({ queryKey: ['ticket', id] })}
+          onCollected={() => {
+            qc.invalidateQueries({ queryKey: ['ticket', id] });
+            qc.invalidateQueries({ queryKey: ['tickets'] });
+            qc.invalidateQueries({ queryKey: ['invoices'] });
+            qc.invalidateQueries({ queryKey: ['payments'] });
+            qc.invalidateQueries({ queryKey: ['dashboard'] });
+          }}
         />
       )}
 
@@ -882,7 +989,7 @@ export default function TicketDetailPage() {
       )}
 
       <Modal open={showAssign} onClose={() => { setShowAssign(false); resetA(); }} title={assignMode === 'reassign' ? 'Reassign Ticket' : assignMode === 'reschedule' ? 'Reschedule Ticket' : 'Assign Ticket'} size="sm">
-        <form onSubmit={ha(d => assignMutation.mutate(d))} className="space-y-4">
+        <form onSubmit={ha(d => assignMutation.mutate(d), onInvalidAssign)} className="space-y-4">
           <Input
             label="Scheduled At"
             type="datetime-local"
@@ -915,7 +1022,7 @@ export default function TicketDetailPage() {
                   </p>
                 )}
                 <TechnicianPicker
-                  techs={techs.filter(t => t.isActive)}
+                  techs={availableTechs}
                   busyIds={busyTechIds}
                   value={selectedTechId}
                   onChange={id => setAssignValue('technicianId', id, { shouldValidate: true })}
@@ -923,13 +1030,44 @@ export default function TicketDetailPage() {
                   requiredSkillCount={requiredSkillCount}
                 />
                 {!selectedTechId && <p className="text-red-400 text-xs mt-1.5">Please select a technician</p>}
+                {errorsA.technicianId && <p className="text-red-400 text-xs mt-1.5">{errorsA.technicianId.message}</p>}
               </>
             )}
-            <input type="hidden" {...ra('technicianId', { required: true })} />
+            <input type="hidden" value={selectedTechId} {...ra('technicianId', { required: 'Please select a technician' })} />
           </div>
 
           <div className="flex justify-end gap-3"><Button variant="secondary" type="button" onClick={() => { setShowAssign(false); resetA(); }}>Cancel</Button><Button type="submit" loading={sa}>{assignMode === 'reassign' ? 'Reassign' : assignMode === 'reschedule' ? 'Reschedule' : 'Assign'}</Button></div>
         </form>
+      </Modal>
+
+      <Modal open={showAssetPicker} onClose={() => { setShowAssetPicker(false); setPickedAssetId(''); }} title="Select Affected Asset" size="sm">
+        <div className="space-y-4 pt-1">
+          <Select
+            label="Select Asset"
+            value={pickedAssetId}
+            onChange={e => setPickedAssetId(e.target.value)}
+            placeholder={customerAssets.length ? 'Choose an asset' : 'No assets registered for this customer'}
+            options={customerAssets.map(a => ({ value: a.id, label: `${a.name}${a.brand ? ` (${a.brand}${a.model ? ' ' + a.model : ''})` : ''}` }))}
+          />
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => { setShowAssetPicker(false); setPickedAssetId(''); }}>Cancel</Button>
+            <Button
+              disabled={!pickedAssetId}
+              onClick={() => {
+                const asset = customerAssets.find(a => a.id === pickedAssetId);
+                if (!asset) return;
+                if (ticket.customerAsset) {
+                  setConfirmAssetChange(asset);
+                } else {
+                  associateAssetMutation.mutate(asset.id);
+                }
+              }}
+              loading={associateAssetMutation.isPending}
+            >
+              Link Asset
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       <Modal open={showClose} onClose={() => { setShowClose(false); resetC(); }} title="Close Ticket" size="sm">
