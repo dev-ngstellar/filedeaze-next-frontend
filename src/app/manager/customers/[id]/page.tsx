@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useParams, usePathname } from 'next/navigation';
+import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { ColumnDef } from '@tanstack/react-table';
@@ -12,20 +12,23 @@ import { DataTable } from '@/components/ui/DataTable';
 import { TicketStatusBadge } from '@/components/ui/Badge';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Input } from '@/components/ui/Input';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
-import { Eye, Plus, Box, ShieldCheck, ShieldOff, Send, Pencil } from 'lucide-react';
+import { Eye, Plus, Box, ShieldCheck, ShieldOff, Send, Pencil, Trash2 } from 'lucide-react';
 import { getErrorMessage } from '@/lib/utils';
 import dayjs from 'dayjs';
 
 export default function CustomerHistoryPage() {
   const { id } = useParams<{ id: string }>();
   const pathname = usePathname();
+  const router = useRouter();
   const prefix = pathname.startsWith('/admin/') ? 'admin' : 'manager';
   const qc = useQueryClient();
   const [showAddEmail, setShowAddEmail] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
 
   const { data: detail, isLoading, isError, error, refetch } = useQuery<Customer & { tickets: Ticket[] }>({
     queryKey: ['customer-history', id],
@@ -78,6 +81,16 @@ export default function CustomerHistoryPage() {
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to update customer')),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: () => api.delete(`/web/manager/customers/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['customers'] });
+      toast.success('Customer deleted');
+      router.push(`/${prefix}/customers`);
+    },
+    onError: (err) => toast.error(getErrorMessage(err, 'Failed to delete customer')),
+  });
+
   const columns: ColumnDef<Ticket, unknown>[] = [
     { accessorKey: 'ticketNumber', header: 'Ticket #' },
     { accessorKey: 'status', header: 'Status', cell: ({ row }) => <TicketStatusBadge status={row.original.status} /> },
@@ -97,6 +110,7 @@ export default function CustomerHistoryPage() {
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">{detail.name}</h2>
                 <Button variant="ghost" size="sm" onClick={openEdit} aria-label="Edit customer"><Pencil size={14} /></Button>
+                <Button variant="ghost" size="sm" onClick={() => setShowDelete(true)} aria-label="Delete customer" className="text-red-500 hover:text-red-600"><Trash2 size={14} /></Button>
               </div>
               <p className="text-sm text-[var(--color-text-muted)]">{detail.phone}{detail.email ? ` · ${detail.email}` : ''}</p>
             </div>
@@ -183,6 +197,16 @@ export default function CustomerHistoryPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={showDelete}
+        onClose={() => setShowDelete(false)}
+        onConfirm={() => deleteMutation.mutate()}
+        title={`Delete ${detail?.name ?? 'customer'}?`}
+        message={`Are you sure you want to delete "${detail?.name}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

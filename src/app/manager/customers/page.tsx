@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { ColumnDef } from '@tanstack/react-table';
-import { Eye, Pencil, Plus, ShieldCheck, ShieldOff } from 'lucide-react';
+import { Eye, Pencil, Plus, ShieldCheck, ShieldOff, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import api from '@/lib/axios';
@@ -15,6 +15,7 @@ import { PaginationMeta } from '@/components/ui/Pagination';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { getErrorMessage } from '@/lib/utils';
 import dayjs from 'dayjs';
 
@@ -31,6 +32,7 @@ export default function CustomersPage() {
   const [limit, setLimit] = useState(20);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Customer | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
 
   const { data, isLoading, isError, error, refetch } = useQuery<{ items: Customer[]; meta: PaginationMeta }>({
     queryKey: ['customers', query, page, limit],
@@ -81,6 +83,16 @@ export default function CustomersPage() {
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to update customer')),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/web/manager/customers/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['customers'] });
+      toast.success('Customer deleted');
+      setDeleteTarget(null);
+    },
+    onError: (err) => toast.error(getErrorMessage(err, 'Failed to delete customer')),
+  });
+
   const columns: ColumnDef<Customer, unknown>[] = [
     { accessorKey: 'name', header: 'Name' },
     { accessorKey: 'phone', header: 'Phone' },
@@ -98,6 +110,7 @@ export default function CustomersPage() {
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="sm" onClick={() => openEdit(row.original)} aria-label="Edit customer"><Pencil size={14} /></Button>
           <Link href={`/${prefix}/customers/${row.original.id}`}><Button variant="ghost" size="sm" aria-label="View customer"><Eye size={14} /></Button></Link>
+          <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(row.original)} aria-label="Delete customer" className="text-red-500 hover:text-red-600"><Trash2 size={14} /></Button>
         </div>
       ),
     },
@@ -163,6 +176,16 @@ export default function CustomersPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        title={`Delete ${deleteTarget?.name ?? 'customer'}?`}
+        message={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }
