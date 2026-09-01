@@ -544,7 +544,7 @@ export interface Ticket {
 
 // ─── Payment / Invoice ────────────────────────────────────────────────────────
 export type PaymentStatus = 'PENDING' | 'COLLECTED' | 'VERIFIED' | 'FAILED';
-export type PaymentMethod = 'CASH' | 'UPI' | 'UPI_QR' | 'RAZORPAY' | 'CARD' | 'NET_BANKING' | 'WALLET' | 'ONLINE';
+export type PaymentMethod = 'CASH' | 'CREDIT';
 export type BillingType = 'WARRANTY' | 'NON_WARRANTY' | 'PARTIAL_WARRANTY';
 
 export interface Payment {
@@ -736,6 +736,9 @@ export interface RevenueReport {
   }>;
   total: number;
   byMethod: Partial<Record<PaymentMethod, number>>;
+  outstandingAmount?: number;
+  pendingInvoicesCount?: number;
+  highestRevenueService?: string;
 }
 
 export interface TicketReport {

@@ -22,10 +22,8 @@ import { ErrorState } from '@/components/ui/ErrorState';
 type Payment = RevenueReport['payments'][number];
 
 const METHOD_COLORS: Record<string, string> = {
-  CASH: '#10b981', // emerald
-  UPI: '#3b82f6',  // blue
-  CARD: '#8b5cf6', // violet
-  ONLINE: '#f59e0b', // amber
+  CASH: '#10b981',   // emerald-500
+  CREDIT: '#8b5cf6', // violet-500
 };
 
 function exportCsv(payments: Payment[]) {
@@ -60,6 +58,9 @@ export default function RevenueReportPage() {
         payments: Array.isArray(d?.payments) ? d.payments : [],
         total: d?.total ?? 0,
         byMethod: d?.byMethod ?? {},
+        outstandingAmount: d?.outstandingAmount ?? 0,
+        pendingInvoicesCount: d?.pendingInvoicesCount ?? 0,
+        highestRevenueService: d?.highestRevenueService ?? 'None recorded',
       };
     },
     staleTime: 30_000,
@@ -73,7 +74,7 @@ export default function RevenueReportPage() {
   const transactions = payments.length;
   const avgValue = transactions > 0 ? Math.round(total / transactions) : 0;
   const cashTotal = payments.filter(p => p.method === 'CASH').reduce((sum, p) => sum + p.amount, 0);
-  const onlineTotal = total - cashTotal;
+  const creditTotal = payments.filter(p => p.method === 'CREDIT').reduce((sum, p) => sum + p.amount, 0);
 
   // Process Primary Chart (Revenue Trend)
   const trendData = useMemo(() => {
@@ -198,12 +199,12 @@ export default function RevenueReportPage() {
           accentColor="bg-teal-500"
         />
         <StatsCard
-          title="Online Payments"
-          value={formatCurrency(onlineTotal)}
+          title="Credit Payments"
+          value={formatCurrency(creditTotal)}
           icon={CreditCard}
-          iconColor="text-amber-600"
-          iconBg="bg-amber-100 dark:bg-amber-500/20"
-          accentColor="bg-amber-500"
+          iconColor="text-violet-600"
+          iconBg="bg-violet-100 dark:bg-violet-500/20"
+          accentColor="bg-violet-500"
         />
       </KpiGrid>
 
@@ -250,7 +251,7 @@ export default function RevenueReportPage() {
                     <Activity className="w-5 h-5 text-emerald-600 mt-0.5" />
                     <div>
                       <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-400">Highest Revenue Service</p>
-                      <p className="text-xs text-emerald-700 dark:text-emerald-500/80 mt-0.5">HVAC Repair (45% of total)</p>
+                      <p className="text-xs text-emerald-700 dark:text-emerald-500/80 mt-0.5">{data?.highestRevenueService || 'None recorded'}</p>
                     </div>
                   </div>
 
@@ -258,15 +259,17 @@ export default function RevenueReportPage() {
                     <Clock className="w-5 h-5 text-amber-600 mt-0.5" />
                     <div>
                       <p className="text-sm font-semibold text-amber-900 dark:text-amber-400">Outstanding Payments</p>
-                      <p className="text-xs text-amber-700 dark:text-amber-500/80 mt-0.5">₹45,200 pending from 12 invoices</p>
+                      <p className="text-xs text-amber-700 dark:text-amber-500/80 mt-0.5">
+                        {formatCurrency(data?.outstandingAmount ?? 0)} pending from {data?.pendingInvoicesCount ?? 0} invoice{(data?.pendingInvoicesCount ?? 0) === 1 ? '' : 's'}
+                      </p>
                     </div>
                   </div>
 
                   <div className="flex items-start gap-3 bg-blue-50 dark:bg-blue-500/10 p-3.5 rounded-xl border border-blue-100 dark:border-blue-500/20">
                     <CreditCard className="w-5 h-5 text-blue-600 mt-0.5" />
                     <div>
-                      <p className="text-sm font-semibold text-blue-900 dark:text-blue-400">Best Payment Method</p>
-                      <p className="text-xs text-blue-700 dark:text-blue-500/80 mt-0.5">UPI transactions up by 15%</p>
+                      <p className="text-sm font-semibold text-blue-900 dark:text-blue-400">Payment Methods</p>
+                      <p className="text-xs text-blue-700 dark:text-blue-500/80 mt-0.5">Cash &amp; Credit accepted at point of service</p>
                     </div>
                   </div>
                 </div>

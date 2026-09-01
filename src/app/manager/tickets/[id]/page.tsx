@@ -241,13 +241,8 @@ function PaymentCollectionCard({ ticketId, spareParts, isAmcCovered, onCollected
         label="Payment Method" value={method}
         onChange={e => setMethod(e.target.value as PaymentMethod)}
         options={[
-          { value: 'CASH', label: 'Cash' },
-          { value: 'UPI', label: 'UPI' },
-          { value: 'UPI_QR', label: 'UPI QR' },
-          { value: 'RAZORPAY', label: 'Razorpay' },
-          { value: 'CARD', label: 'Card' },
-          { value: 'NET_BANKING', label: 'Net Banking' },
-          { value: 'WALLET', label: 'Wallet' },
+          { value: 'CASH',   label: 'Cash' },
+          { value: 'CREDIT', label: 'Credit' },
         ]}
       />
 
