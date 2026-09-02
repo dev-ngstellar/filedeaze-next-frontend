@@ -1,7 +1,6 @@
-// UI REDESIGN — logic unchanged
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { ColumnDef } from '@tanstack/react-table';
@@ -31,20 +30,24 @@ export default function PaymentsPage() {
   // dashboard's COLLECTED count has no date restriction, so the destination list must not apply
   // the page's usual "this month" default either, or the two numbers would disagree.
   const arrivedFromDashboard = searchParams.get('status') === 'COLLECTED';
-  const [status, setStatus] = useState(arrivedFromDashboard ? 'COLLECTED' : '');
+  const initialStatus = searchParams.get('status') ?? (arrivedFromDashboard ? 'COLLECTED' : '');
+  const [status, setStatus] = useState(initialStatus);
+  const [methodFilter, setMethodFilter] = useState('');
   const [from, setFrom] = useState(arrivedFromDashboard ? '' : monthStart);
   const [to, setTo] = useState(arrivedFromDashboard ? '' : today);
   const [params, setParams] = useState(
-    arrivedFromDashboard ? { status: 'COLLECTED', from: '', to: '' } : { status: '', from: monthStart, to: today },
+    arrivedFromDashboard ? { status: 'COLLECTED', from: '', to: '' } : { status: initialStatus, from: monthStart, to: today },
   );
   const [dashboardFilterActive, setDashboardFilterActive] = useState(arrivedFromDashboard);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [verifyTarget, setVerifyTarget] = useState<Payment | null>(null);
+  const [settleTarget, setSettleTarget] = useState<Payment | null>(null);
 
   const clearDashboardFilter = () => {
     setDashboardFilterActive(false);
     setStatus('');
+    setMethodFilter('');
     setFrom(monthStart);
     setTo(today);
     setParams({ status: '', from: monthStart, to: today });
@@ -60,12 +63,46 @@ export default function PaymentsPage() {
     placeholderData: keepPreviousData,
   });
 
-  const data = response?.items ?? [];
+  const rawData = response?.items ?? [];
+
+  const data = useMemo(() => {
+    if (!methodFilter) return rawData;
+    return rawData.filter(p => p.method === methodFilter);
+  }, [rawData, methodFilter]);
 
   const verifyMutation = useMutation({
     mutationFn: (id: string) => api.patch(`/web/manager/payments/${id}/verify`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['payments'] }); toast.success('Payment verified'); setVerifyTarget(null); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['payments'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      toast.success('Payment verified');
+      setVerifyTarget(null);
+    },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to verify payment')),
+  });
+
+  const settleMutation = useMutation({
+    mutationFn: async (target: Payment) => {
+      const payload = {
+        method: 'CASH',
+        serviceCharge: Number(target.serviceCharge ?? target.amount ?? 0),
+        labourCharge: Number(target.labourCharge ?? 0),
+        additionalCharge: Number(target.additionalCharge ?? 0),
+        discount: Number(target.discount ?? 0),
+      };
+      await api.post(`/web/manager/tickets/${target.ticketId}/collect-payment`, payload);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['payments'] });
+      qc.invalidateQueries({ queryKey: ['tickets'] });
+      qc.invalidateQueries({ queryKey: ['ticket'] });
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['revenue-report'] });
+      toast.success('Credit payment settled successfully');
+      setSettleTarget(null);
+    },
+    onError: (err) => toast.error(getErrorMessage(err, 'Failed to settle credit payment')),
   });
 
   const totalVerified = response?.totalVerified ?? 0;
@@ -131,17 +168,33 @@ export default function PaymentsPage() {
     {
       id: 'actions',
       header: '',
-      cell: ({ row }) =>
-        row.original.status === 'COLLECTED' ? (
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => setVerifyTarget(row.original)}
-          >
-            <CheckCircle size={13} />
-            Verify
-          </Button>
-        ) : null,
+      cell: ({ row }) => {
+        const payment = row.original;
+        if (payment.status === 'COLLECTED') {
+          return (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setVerifyTarget(payment)}
+            >
+              <CheckCircle size={13} />
+              Verify
+            </Button>
+          );
+        }
+        if (payment.status === 'PENDING' && payment.method === 'CREDIT') {
+          return (
+            <Button
+              size="sm"
+              onClick={() => setSettleTarget(payment)}
+            >
+              <CheckCircle size={13} />
+              Settle Credit
+            </Button>
+          );
+        }
+        return null;
+      },
     },
   ];
 
@@ -212,7 +265,20 @@ export default function PaymentsPage() {
             ]}
             value={status}
             onChange={e => setStatus(e.target.value)}
-            className="w-48 h-10"
+            className="w-40 h-10"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-[var(--color-text-secondary)]">Method</label>
+          <Select
+            options={[
+              { value: '', label: 'All Methods' },
+              { value: 'CASH', label: 'Cash' },
+              { value: 'CREDIT', label: 'Credit' },
+            ]}
+            value={methodFilter}
+            onChange={e => setMethodFilter(e.target.value)}
+            className="w-40 h-10"
           />
         </div>
       </FilterCard>
@@ -277,6 +343,18 @@ export default function PaymentsPage() {
         confirmLabel="Verify"
         loading={verifyMutation.isPending}
       />
+
+      <ConfirmDialog
+        open={!!settleTarget}
+        onClose={() => setSettleTarget(null)}
+        onConfirm={() => settleTarget && settleMutation.mutate(settleTarget)}
+        tone="neutral"
+        title={`Settle credit payment for ${settleTarget?.ticket?.ticketNumber ?? 'this ticket'}?`}
+        message={`Confirm customer payment of ₹${settleTarget ? Number(settleTarget.invoice?.total ?? settleTarget.amount).toLocaleString() : '0'} to mark this credit as collected.`}
+        confirmLabel="Confirm Settlement"
+        loading={settleMutation.isPending}
+      />
     </div>
   );
 }
+

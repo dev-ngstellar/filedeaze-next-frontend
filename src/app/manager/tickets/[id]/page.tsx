@@ -17,7 +17,7 @@ import { Textarea } from '@/components/ui/Textarea';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { ErrorState } from '@/components/ui/ErrorState';
 import Link from 'next/link';
-import { Star, CheckCircle, XCircle, RefreshCw, UserCheck, ChevronLeft, CalendarClock, ThumbsUp, ThumbsDown, AlertTriangle, Box, ShieldCheck, ShieldOff, Link2 } from 'lucide-react';
+import { Star, CheckCircle, XCircle, RefreshCw, UserCheck, ChevronLeft, CalendarClock, ThumbsUp, ThumbsDown, AlertTriangle, Box, ShieldCheck, ShieldOff, Link2, CreditCard } from 'lucide-react';
 import dayjs from 'dayjs';
 import { getMinimumSelectableDateTime, isPastSchedule, getErrorMessage, hasMoreThanTwoDecimals } from '@/lib/utils';
 import type { CustomerAsset } from '@/types';
@@ -403,6 +403,32 @@ export default function TicketDetailPage() {
   const [pickedAssetId, setPickedAssetId] = useState('');
   const [confirmAssetChange, setConfirmAssetChange] = useState<CustomerAsset | null>(null);
   const [confirmConsumeVisit, setConfirmConsumeVisit] = useState(false);
+  const [showSettleCredit, setShowSettleCredit] = useState(false);
+
+  const settleCreditMutation = useMutation({
+    mutationFn: async () => {
+      if (!ticket?.payment) return;
+      const payload = {
+        method: 'CASH',
+        serviceCharge: Number(ticket.payment.serviceCharge ?? ticket.payment.amount ?? 0),
+        labourCharge: Number(ticket.payment.labourCharge ?? 0),
+        additionalCharge: Number(ticket.payment.additionalCharge ?? 0),
+        discount: Number(ticket.payment.discount ?? 0),
+      };
+      await api.post(`/web/manager/tickets/${id}/collect-payment`, payload);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ticket', id] });
+      qc.invalidateQueries({ queryKey: ['tickets'] });
+      qc.invalidateQueries({ queryKey: ['payments'] });
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['revenue-report'] });
+      toast.success('Credit payment settled successfully');
+      setShowSettleCredit(false);
+    },
+    onError: (err) => toast.error(getErrorMessage(err, 'Failed to settle credit payment')),
+  });
 
   const { data: ticket, isLoading, isError, error, refetch, isFetching } = useQuery<Ticket>({ queryKey: ['ticket', id], queryFn: async () => (await api.get(`/web/manager/tickets/${id}`)).data.data });
   const { data: techs = [] } = useQuery<Technician[]>({ queryKey: ['technicians'], queryFn: async () => (await api.get('/web/manager/technicians')).data.data });
@@ -757,13 +783,55 @@ export default function TicketDetailPage() {
           )}
 
           {ticket.payment ? (
-            <div className="space-y-1 text-[var(--color-text-secondary)]">
+            <div className="space-y-2 text-[var(--color-text-secondary)]">
               <div className="flex items-center gap-2 flex-wrap">
                 <PaymentStatusBadge status={ticket.payment.status} />
+                {ticket.payment.method === 'CREDIT' && (
+                  <Badge variant="blue" showDot={false}>
+                    <CreditCard size={12} className="mr-1" />
+                    Credit Payment
+                  </Badge>
+                )}
                 <Badge variant={ticket.isAmcCovered ? 'purple' : 'info'} showDot={false}>
                   {ticket.isAmcCovered ? 'AMC Visit' : 'Not an AMC Visit'}
                 </Badge>
               </div>
+
+              {/* Financial summary: Collected vs Outstanding */}
+              {ticket.payment.status === 'PENDING' ? (
+                <div className="bg-[var(--color-surface-elevated)] p-3 rounded-lg border border-amber-200 dark:border-amber-900/30 my-2 space-y-1.5 text-xs">
+                  <div className="flex justify-between font-medium">
+                    <span>Collected Amount:</span>
+                    <span className="text-emerald-600 font-semibold">₹0</span>
+                  </div>
+                  <div className="flex justify-between font-medium">
+                    <span>Outstanding Amount:</span>
+                    <span className="text-amber-600 font-bold">
+                      ₹{(ticket.paymentSummary?.grandTotal ?? ticket.payment.invoice?.total ?? ticket.payment.amount).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-[var(--color-surface-elevated)] p-3 rounded-lg border border-[var(--color-border)] my-2 space-y-1.5 text-xs">
+                  <div className="flex justify-between font-medium">
+                    <span>Collected Amount:</span>
+                    <span className="text-emerald-600 font-bold">
+                      ₹{(ticket.paymentSummary?.grandTotal ?? ticket.payment.invoice?.total ?? ticket.payment.amount).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between font-medium">
+                    <span>Outstanding Amount:</span>
+                    <span className="text-[var(--color-text-muted)] font-semibold">₹0</span>
+                  </div>
+                  {ticket.payment.collectedAt && (
+                    <div className="flex justify-between text-[11px] text-[var(--color-text-muted)] pt-1 border-t border-[var(--color-border)]">
+                      <span>Collected At:</span>
+                      <span>{dayjs(ticket.payment.collectedAt).format('DD MMM YYYY, HH:mm')}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {(ticket.payment.serviceCharge || ticket.payment.labourCharge || ticket.payment.sparePartsAmount || ticket.payment.additionalCharge) ? (
                 <>
                   <p className={ticket.payment.serviceChargeWaived ? 'line-through text-[var(--color-text-muted)]' : ''}>
@@ -802,7 +870,19 @@ export default function TicketDetailPage() {
               ) : (
                 <p><span className="text-[var(--color-text-muted)]">Amount:</span> ₹{ticket.payment.amount.toLocaleString()}</p>
               )}
-              <p><span className="text-[var(--color-text-muted)]">Method:</span> {ticket.payment.method ?? '—'}</p>
+
+              {ticket.payment.status === 'PENDING' && ticket.payment.method === 'CREDIT' && (
+                <div className="pt-2">
+                  <Button
+                    size="sm"
+                    className="w-full sm:w-auto"
+                    onClick={() => setShowSettleCredit(true)}
+                  >
+                    <CheckCircle size={14} className="mr-1.5" />
+                    Collect Credit Payment
+                  </Button>
+                </div>
+              )}
             </div>
           ) : ticket.status === 'COMPLETED' ? (
             <p className="text-[var(--color-text-muted)]">Not yet collected — see Payment Details below.</p>
@@ -1114,6 +1194,17 @@ export default function TicketDetailPage() {
         message={`This will consume one AMC visit on ${ticket.customerAsset?.name ?? 'this asset'}'s ${ticket.amcStatus?.planName ?? 'AMC'} plan. Remaining visits will go from ${ticket.amcStatus?.remainingVisits ?? 0} to ${(ticket.amcStatus?.remainingVisits ?? 1) - 1}. This cannot be undone.`}
         confirmLabel="Consume AMC Visit"
         loading={consumeAmcVisitMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={showSettleCredit}
+        onClose={() => setShowSettleCredit(false)}
+        onConfirm={() => settleCreditMutation.mutate()}
+        tone="neutral"
+        title={`Settle credit payment for ${ticket.ticketNumber}?`}
+        message={`Customer has paid ₹${(ticket.paymentSummary?.grandTotal ?? ticket.payment?.invoice?.total ?? ticket.payment?.amount ?? 0).toLocaleString()}. Mark this credit payment as collected?`}
+        confirmLabel="Confirm Settlement"
+        loading={settleCreditMutation.isPending}
       />
     </div>
   );

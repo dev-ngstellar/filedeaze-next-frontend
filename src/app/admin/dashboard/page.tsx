@@ -275,11 +275,11 @@ export default function AdminDashboardPage() {
             </Link>
             <Link href="/admin/payments?status=COLLECTED" className="block rounded-2xl cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2">
               <StatsCard
-                title="Pending Payments"
+                title="Pending Cash Verification"
                 value={data.pendingPayments}
                 icon={Receipt}
                 accentHex={accent}
-                context={`${data.pendingPayments} payment${data.pendingPayments !== 1 ? 's' : ''} awaiting verification`}
+                context={`${data.pendingPayments} collected payment${data.pendingPayments !== 1 ? 's' : ''} awaiting verification`}
                 status={data.pendingPayments > 0 ? 'followup' : 'healthy'}
                 staggerClass="stagger-6"
               />

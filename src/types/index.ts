@@ -565,6 +565,7 @@ export interface Payment {
   method?: PaymentMethod;
   collectedAt?: string;
   verifiedAt?: string;
+  confirmedBy?: string; // Technician ID who collected the payment
   createdAt: string;
   invoice?: { gstPercent: number; gstAmount: number; total: number } | null;
 }

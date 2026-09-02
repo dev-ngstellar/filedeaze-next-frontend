@@ -115,11 +115,11 @@ export default function ManagerDashboardPage() {
             footerText="Live"
           />
           <StatsCard
-            title="Collections Today"
+            title="Payments Awaiting Verification"
             value={`₹${data.pendingPayments.toLocaleString()}`}
             icon={DollarSign}
             accentHex={accent}
-            context="Payments awaiting collection"
+            context="Collected payments awaiting verification"
             status="growing"
             footerText="Live"
           />
