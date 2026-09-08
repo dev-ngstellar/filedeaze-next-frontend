@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { ColumnDef } from '@tanstack/react-table';
@@ -36,7 +36,9 @@ export default function PaymentsPage() {
   const [from, setFrom] = useState(arrivedFromDashboard ? '' : monthStart);
   const [to, setTo] = useState(arrivedFromDashboard ? '' : today);
   const [params, setParams] = useState(
-    arrivedFromDashboard ? { status: 'COLLECTED', from: '', to: '' } : { status: initialStatus, from: monthStart, to: today },
+    arrivedFromDashboard
+      ? { status: 'COLLECTED', method: '', from: '', to: '' }
+      : { status: initialStatus, method: '', from: monthStart, to: today },
   );
   const [dashboardFilterActive, setDashboardFilterActive] = useState(arrivedFromDashboard);
   const [page, setPage] = useState(1);
@@ -50,7 +52,7 @@ export default function PaymentsPage() {
     setMethodFilter('');
     setFrom(monthStart);
     setTo(today);
-    setParams({ status: '', from: monthStart, to: today });
+    setParams({ status: '', method: '', from: monthStart, to: today });
     setPage(1);
     router.replace(pathname);
   };
@@ -64,11 +66,7 @@ export default function PaymentsPage() {
   });
 
   const rawData = response?.items ?? [];
-
-  const data = useMemo(() => {
-    if (!methodFilter) return rawData;
-    return rawData.filter(p => p.method === methodFilter);
-  }, [rawData, methodFilter]);
+  const data = rawData;
 
   const verifyMutation = useMutation({
     mutationFn: (id: string) => api.patch(`/web/manager/payments/${id}/verify`),
@@ -118,6 +116,15 @@ export default function PaymentsPage() {
       ),
     },
     {
+      accessorKey: 'ticket.customer.name',
+      header: 'Customer',
+      cell: ({ row }) => (
+        <span className="text-[var(--color-text-primary)]">
+          {row.original.ticket?.customer?.name ?? '—'}
+        </span>
+      ),
+    },
+    {
       accessorKey: 'amount',
       header: 'Subtotal',
       cell: ({ row }) => (
@@ -147,21 +154,43 @@ export default function PaymentsPage() {
     {
       accessorKey: 'status',
       header: 'Status',
-      cell: ({ row }) => <PaymentStatusBadge status={row.original.status} />,
+      cell: ({ row }) => (
+        <div className="space-y-1">
+          <PaymentStatusBadge status={row.original.status} />
+          {row.original.status === 'PENDING' && (
+            <p className="text-[11px] font-medium text-amber-700 dark:text-amber-400">Outstanding</p>
+          )}
+        </div>
+      ),
     },
     {
       accessorKey: 'method',
       header: 'Method',
       cell: ({ row }) => (
-        <span className="text-[var(--color-text-secondary)]">{row.original.method ?? '—'}</span>
+        <span className="font-medium text-[var(--color-text-secondary)]">{row.original.method ?? '—'}</span>
       ),
     },
     {
-      accessorKey: 'createdAt',
-      header: 'Date',
+      accessorKey: 'collectedAt',
+      header: 'Collected',
       cell: ({ row }) => (
         <span className="text-xs text-[var(--color-text-muted)] tabular-nums">
-          {dayjs(row.original.createdAt).format('DD MMM YYYY')}
+          {row.original.collectedAt ? dayjs(row.original.collectedAt).format('DD MMM YYYY, h:mm A') : 'Not collected'}
+        </span>
+      ),
+    },
+    {
+      id: 'verification',
+      header: 'Verification',
+      cell: ({ row }) => (
+        <span className="text-xs text-[var(--color-text-muted)]">
+          {row.original.status === 'VERIFIED'
+            ? 'Verified'
+            : row.original.technician?.name
+              ? `Collected by ${row.original.technician.name}`
+              : row.original.confirmedBy
+                ? `Collected by ${row.original.confirmedBy}`
+                : '—'}
         </span>
       ),
     },
@@ -250,7 +279,7 @@ export default function PaymentsPage() {
         to={to}
         onFromChange={setFrom}
         onToChange={setTo}
-        onApply={() => { setDashboardFilterActive(false); setPage(1); setParams({ status, from, to }); }}
+        onApply={() => { setDashboardFilterActive(false); setPage(1); setParams({ status, method: methodFilter, from, to }); }}
         onReset={clearDashboardFilter}
         isLoading={isLoading}
       >
@@ -262,6 +291,8 @@ export default function PaymentsPage() {
               { value: 'PENDING', label: 'Pending' },
               { value: 'COLLECTED', label: 'Collected' },
               { value: 'VERIFIED', label: 'Verified' },
+              { value: 'FAILED', label: 'Failed' },
+              { value: 'REFUNDED', label: 'Refunded' },
             ]}
             value={status}
             onChange={e => setStatus(e.target.value)}

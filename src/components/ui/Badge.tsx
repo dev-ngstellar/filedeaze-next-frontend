@@ -3,12 +3,12 @@ import { TicketStatus, TenantStatus, PaymentStatus, UserRole, AmcSubscriptionSta
 
 const variants = {
   default:  { bg: 'bg-[var(--color-surface-elevated)]',        text: 'text-[var(--color-text-secondary)]',       dot: 'bg-[var(--color-surface-elevated)]' },
-  success:  { bg: 'bg-[var(--color-surface-elevated)]',       text: 'text-emerald-700',     dot: 'bg-emerald-500' },
-  warning:  { bg: 'bg-[var(--color-surface-elevated)]',         text: 'text-amber-700',       dot: 'bg-amber-500' },
-  danger:   { bg: 'bg-[var(--color-surface-elevated)]',           text: 'text-red-700',         dot: 'bg-red-500' },
-  info:     { bg: 'bg-[var(--color-surface-elevated)]',          text: 'text-blue-700',        dot: 'bg-blue-500' },
-  purple:   { bg: 'bg-[var(--color-surface-elevated)]',        text: 'text-violet-700',      dot: 'bg-violet-500' },
-  orange:   { bg: 'bg-orange-50',        text: 'text-orange-700',      dot: 'bg-orange-500' },
+  success:  { bg: 'bg-[var(--color-surface-elevated)]',       text: 'text-emerald-700 dark:text-emerald-400',     dot: 'bg-emerald-500' },
+  warning:  { bg: 'bg-[var(--color-surface-elevated)]',         text: 'text-amber-700 dark:text-amber-400',       dot: 'bg-amber-500' },
+  danger:   { bg: 'bg-[var(--color-surface-elevated)]',           text: 'text-red-700 dark:text-red-400',         dot: 'bg-red-500' },
+  info:     { bg: 'bg-[var(--color-surface-elevated)]',          text: 'text-blue-700 dark:text-blue-400',        dot: 'bg-blue-500' },
+  purple:   { bg: 'bg-[var(--color-surface-elevated)]',        text: 'text-violet-700 dark:text-violet-400',      dot: 'bg-violet-500' },
+  orange:   { bg: 'bg-orange-50 dark:bg-orange-500/10',        text: 'text-orange-700 dark:text-orange-400',      dot: 'bg-orange-500' },
   cyan:     { bg: 'bg-cyan-50',          text: 'text-cyan-700',        dot: 'bg-cyan-500' },
   teal:     { bg: 'bg-[var(--color-surface-elevated)]',          text: 'text-teal-700',        dot: 'bg-teal-500' },
 };
@@ -93,6 +93,7 @@ const paymentColors: Record<PaymentStatus, BadgeVariant> = {
   COLLECTED: 'info',
   VERIFIED:  'success',
   FAILED:    'danger',
+  REFUNDED:  'orange',
 };
 
 export function PaymentStatusBadge({ status }: { status: PaymentStatus }) {

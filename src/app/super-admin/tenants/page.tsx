@@ -281,7 +281,9 @@ export default function TenantsPage() {
       </FilterCard>
 
       {/* Table */}
-      <DataTable data={filteredTenants} columns={columns} isLoading={isLoading} isError={isError} error={error} onRetry={refetch} />
+      <div className="tenants-table-scrollbar">
+        <DataTable data={filteredTenants} columns={columns} isLoading={isLoading} isError={isError} error={error} onRetry={refetch} />
+      </div>
 
 
       {/* Create Tenant Modal */}

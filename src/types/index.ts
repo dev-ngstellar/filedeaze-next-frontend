@@ -543,7 +543,7 @@ export interface Ticket {
 }
 
 // ─── Payment / Invoice ────────────────────────────────────────────────────────
-export type PaymentStatus = 'PENDING' | 'COLLECTED' | 'VERIFIED' | 'FAILED';
+export type PaymentStatus = 'PENDING' | 'COLLECTED' | 'VERIFIED' | 'FAILED' | 'REFUNDED';
 export type PaymentMethod = 'CASH' | 'CREDIT';
 export type BillingType = 'WARRANTY' | 'NON_WARRANTY' | 'PARTIAL_WARRANTY';
 
@@ -563,8 +563,8 @@ export interface Payment {
   discount?: number;
   status: PaymentStatus;
   method?: PaymentMethod;
+  technician?: Technician;
   collectedAt?: string;
-  verifiedAt?: string;
   confirmedBy?: string; // Technician ID who collected the payment
   createdAt: string;
   invoice?: { gstPercent: number; gstAmount: number; total: number } | null;
@@ -587,6 +587,23 @@ export interface Invoice {
   total: number;
   pdfUrl?: string;
   createdAt: string;
+}
+
+export interface InvoiceCompany {
+  companyName: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  logoUrl?: string | null;
+  sealUrl?: string | null;
+}
+
+export interface InvoiceDetailResponse {
+  invoice: Invoice;
+  tenant: InvoiceCompany | null;
 }
 
 /** GST breakdown for a ticket's payment, derived from its persisted Invoice — the single
@@ -693,6 +710,7 @@ export interface CompanySettings {
   phone: string;
   address: string;
   logoUrl?: string;
+  sealUrl?: string;
   contactPerson?: string;
   city?: string;
   state?: string;

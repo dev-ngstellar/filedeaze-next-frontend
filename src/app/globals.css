@@ -267,6 +267,32 @@ body {
   background: rgba(255, 255, 255, 0.18);
 }
 
+/* ── Tenants Table Scrollbar ────────────────────────────── */
+.tenants-table-scrollbar .table-sticky-head {
+  scrollbar-width: auto;
+  scrollbar-color: var(--color-primary) var(--color-surface-elevated);
+}
+
+.tenants-table-scrollbar .table-sticky-head::-webkit-scrollbar {
+  height: 10px;
+}
+
+.tenants-table-scrollbar .table-sticky-head::-webkit-scrollbar-track {
+  background: var(--color-surface-elevated);
+  border-radius: 9999px;
+  border: 1px solid var(--color-border);
+}
+
+.tenants-table-scrollbar .table-sticky-head::-webkit-scrollbar-thumb {
+  background: var(--color-primary);
+  border: 2px solid var(--color-surface-elevated);
+  border-radius: 9999px;
+}
+
+.tenants-table-scrollbar .table-sticky-head::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-hover, var(--color-text-primary));
+}
+
 /* ── Animation Utilities ────────────────────────────────── */
 @keyframes fe-fade-in {
   from {
@@ -746,6 +772,14 @@ body {
   transition-property: background-color, border-color, color, fill, stroke, box-shadow, opacity, filter;
   transition-duration: 150ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Theme changes should be painted immediately; normal interaction transitions remain enabled. */
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition: none !important;
+  animation: none !important;
 }
 
 /* Stage 1: Application Shell (180ms) */

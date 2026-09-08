@@ -787,7 +787,7 @@ export default function TicketDetailPage() {
               <div className="flex items-center gap-2 flex-wrap">
                 <PaymentStatusBadge status={ticket.payment.status} />
                 {ticket.payment.method === 'CREDIT' && (
-                  <Badge variant="blue" showDot={false}>
+                  <Badge variant="info" showDot={false}>
                     <CreditCard size={12} className="mr-1" />
                     Credit Payment
                   </Badge>

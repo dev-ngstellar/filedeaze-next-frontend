@@ -15,41 +15,40 @@ const ThemeContext = createContext<ThemeContextType>({
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>('light');
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof document !== 'undefined' && document.documentElement.classList.contains('dark')) {
+      return 'dark';
+    }
+
+    if (typeof window !== 'undefined' && window.localStorage.getItem('fieldeaze-theme') === 'dark') {
+      return 'dark';
+    }
+
+    return 'light';
+  });
 
   useEffect(() => {
-    const storedTheme = localStorage.getItem('fieldeaze-theme') as Theme;
-    if (storedTheme === 'dark') {
-      setTheme('dark');
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, []);
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+  }, [theme]);
 
   const toggleTheme = () => {
-    const doSwap = () => {
-      setTheme(prev => {
-        const newTheme = prev === 'light' ? 'dark' : 'light';
-        localStorage.setItem('fieldeaze-theme', newTheme);
-        if (newTheme === 'dark') {
-          document.documentElement.classList.add('dark');
-        } else {
-          document.documentElement.classList.remove('dark');
-        }
-        return newTheme;
-      });
-    };
+    const newTheme: Theme = document.documentElement.classList.contains('dark') ? 'light' : 'dark';
 
-    // @ts-ignore
-    if (document.startViewTransition) {
-      // @ts-ignore
-      document.startViewTransition(() => {
-        doSwap();
-      });
-    } else {
-      doSwap();
-    }
+    document.documentElement.classList.add('theme-switching');
+    document.documentElement.classList.toggle('dark', newTheme === 'dark');
+    setTheme(newTheme);
+
+    requestAnimationFrame(() => {
+      document.documentElement.classList.remove('theme-switching');
+    });
+
+    queueMicrotask(() => {
+      try {
+        localStorage.setItem('fieldeaze-theme', newTheme);
+      } catch {
+        // Ignore storage restrictions; the active theme still remains applied.
+      }
+    });
   };
 
   return (

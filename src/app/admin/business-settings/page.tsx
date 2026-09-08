@@ -163,6 +163,21 @@ export default function BusinessSettingsPage() {
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to upload company logo')),
   });
 
+  const sealMutation = useMutation({
+    mutationFn: (file: File) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      return api.post('/web/admin/company-settings/seal', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['company-settings'] });
+      toast.success('Invoice seal updated successfully');
+    },
+    onError: (err) => toast.error(getErrorMessage(err, 'Failed to upload invoice seal')),
+  });
+
   const _upiQrMutation = useMutation({
     mutationFn: (file: File) => {
       const fd = new FormData();
@@ -348,6 +363,17 @@ export default function BusinessSettingsPage() {
                   loading={logoMutation.isPending}
                   preview={companyData?.logoUrl}
                 />
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-[var(--color-text-secondary)] mb-2">Invoice Seal</p>
+                <FileUpload
+                  accept="image/png,image/jpeg,image/webp"
+                  onFile={file => sealMutation.mutate(file)}
+                  loading={sealMutation.isPending}
+                  preview={companyData?.sealUrl}
+                />
+                <p className="text-[11px] text-[var(--color-text-muted)] mt-1">Optional. This seal is shown on generated invoice PDFs.</p>
               </div>
 
               <form className="grid grid-cols-1 md:grid-cols-2 gap-4">
